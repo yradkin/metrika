@@ -514,7 +514,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='2.1';
+const APP_VER='2.2';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -1259,8 +1259,12 @@ async function importHealth(file){const p=curP();if(!p)return;
   catch(e){closeSheet();toast('Не получилось прочитать файл: '+(e.message||'ошибка'));}}
 
 /* ---------- Показатели в стиле карточек: мини-график с полосой нормы ---------- */
-let indQ='',indPer=0;
-const perOK=d=>!indPer||!d||(today()-parseD(d))/864e5<=indPer*30.5;
+let indQ='',indPer=0,indFrom='',indTo='';
+const perOK=d=>{if(!indPer||!d)return true;if(indPer===-1)return (!indFrom||d>=indFrom)&&(!indTo||d<=indTo);return (today()-parseD(d))/864e5<=indPer*30.5;};
+const PERS=[[0,'Всё'],[36,'3 г.'],[12,'Год'],[6,'6 мес.'],[1,'Мес.'],[-1,'📅 Свой']];
+const perLabel=()=>indPer===-1?(indFrom||indTo?(indFrom?'с '+fmtD(indFrom):'')+(indTo?' по '+fmtD(indTo):''):'свой период'):({0:'за всё время',36:'за 3 года',12:'за год',6:'за полгода',1:'за месяц'}[indPer]);
+function perSeg(key){return '<div class="seg" role="group">'+PERS.map(([m,l])=>'<button type="button" data-per="'+m+'"'+(key?' data-perind="'+esc(key)+'"':'')+' aria-pressed="'+(indPer===m)+'">'+l+'</button>').join('')+'</div>'+
+  (indPer===-1?'<div class="row" style="gap:8px;flex-wrap:nowrap;margin-top:8px"><div class="fld" style="flex:1;min-width:0"><label>с</label><input class="inp" type="date" data-pfrom'+(key?' data-perind="'+esc(key)+'"':'')+' value="'+esc(indFrom)+'"></div><div class="fld" style="flex:1;min-width:0"><label>по</label><input class="inp" type="date" data-pto'+(key?' data-perind="'+esc(key)+'"':'')+' value="'+esc(indTo)+'"></div></div>':'');}
 function vitalsOf(p){const out=[];const ws=wlogGet(p);const h=num(p.height);
   if(ws.length)out.push({key:'V_WEIGHT',name:'Вес',pts:ws.map(w=>({date:w.date,value:num(w.kg),unit:'кг',lo:'',hi:''}))});
   if(ws.length&&h)out.push({key:'V_BMI',name:'Индекс массы тела',pts:ws.map(w=>({date:w.date,value:+(num(w.kg)/Math.pow(h/100,2)).toFixed(1),unit:'кг/м²',lo:18.5,hi:24.9}))});
@@ -1286,7 +1290,7 @@ function indRow2(x,p){const it=x.last,s=statusOf(it,p);const v=num(it.value);
 function indHTML(){const p=curP();const inds=indicatorsOf(p.id);const vit=vitalsOf(p);
   let h='<div class="row" style="justify-content:space-between">'+profChip()+'</div>';
   h+='<div class="withbtn"><input class="inp" data-indq placeholder="Поиск показателя" value="'+esc(indQ)+'" autocomplete="off"></div>';
-  h+='<div class="seg" role="group">'+[[0,'Всё время'],[36,'3 года'],[12,'Год'],[6,'Полгода']].map(([m,l])=>'<button type="button" data-per="'+m+'" aria-pressed="'+(indPer===m)+'">'+l+'</button>').join('')+'</div>';
+  h+=perSeg('');
   const q=indQ.trim().toLowerCase();const match=x=>!q||x.name.toLowerCase().includes(q)||(x.code&&CAT[x.code]&&CAT[x.code].al.some(a=>a.includes(q)));
   const vs=vit.filter(match);
   if(!q||vs.length)h+='<div class="yr">Витальные показатели</div><section class="card"><div class="list">'+(vs.length?vs.map(x=>indRow2(x,p)).join(''):'')+(vit.length?'':'<div class="empty" style="padding:6px 0">Добавьте рост и вес в профиле — посчитаю индекс массы тела.</div><button type="button" class="btn sm" data-editprof="'+p.id+'">Заполнить</button>')+'</div></section>';
@@ -1325,9 +1329,9 @@ function openIndicator(key){const p=curP();let x=indicatorsOf(p.id).find(y=>y.ke
       (refTxt(n)||!vital?'<div class="li" style="cursor:default;text-align:left;margin-top:10px;border-top:1px solid var(--line)"><span class="sdot" style="background:var(--good)"></span><div><div class="t">Норма'+(n.src==='own'?' (своя)':n.src==='typ'?' (типичная'+(p.sex?' для '+(p.sex==='m'?'мужчины':'женщины'):'')+(ag?' '+ag+' '+plural(ag,'год','года','лет'):'')+')':n.src==='blank'&&refTxt(n)?' (с бланка)':'')+'</div></div><div class="r" style="color:var(--accent-ink)">'+(refTxt(n)||'—')+' '+esc(refTxt(n)?last.unit||'':'')+'</div></div>'+(vital||SY.ro?'':'<button type="button" class="nlink" data-normset="'+esc(key)+'">Настроить норму</button>'):'')+'</section>';}
   const pts=x?x.pts.filter(q=>num(q.value)!=null&&perOK(q.date)):[];
   if(x&&x.pts.length>0&&x.pts.some(q=>num(q.value)!=null)){
-    h+='<section class="card"><div class="h"><h2>Динамика <span style="color:var(--accent);text-transform:none;letter-spacing:0">'+({0:'за всё время',36:'за 3 года',12:'за год',6:'за полгода'}[indPer])+'</span></h2></div>'+bigChart(x,p,thinPts(pts.length?pts:x.pts.filter(q=>num(q.value)!=null),140))+
-      '<div class="seg" role="group" style="margin-top:8px">'+[[0,'Всё'],[36,'3 года'],[12,'Год'],[6,'Полгода']].map(([m,l])=>'<button type="button" data-per="'+m+'" data-perind="'+esc(key)+'" aria-pressed="'+(indPer===m)+'">'+l+'</button>').join('')+'</div>';
-    const vs=(pts.length?pts:x.pts).map(q=>num(q.value)).filter(v=>v!=null);
+    h+='<section class="card"><div class="h"><h2>Динамика <span style="color:var(--accent);text-transform:none;letter-spacing:0">'+esc(perLabel())+'</span></h2></div>'+(pts.length?bigChart(x,p,thinPts(pts,140)):'<div class="empty">В этом периоде измерений нет</div>')+
+      '<div style="margin-top:8px">'+perSeg(key)+'</div>';
+    const vs=pts.map(q=>num(q.value)).filter(v=>v!=null);
     if(vs.length>1){const prev=vital?vs[0]:vs[vs.length-2],cur=vs[vs.length-1];const dl=cur-prev;const pc=prev?dl/prev*100:0;
       h+='<div class="stats"><div><b>'+fmtN(+median(vs).toPrecision(4))+'</b><span>медиана</span></div><div><b>'+fmtN(Math.min(...vs))+'</b><span>минимум</span></div><div><b>'+fmtN(Math.max(...vs))+'</b><span>максимум</span></div><div><b style="color:'+(dl>0?'var(--crit)':dl<0?'#3d7be0':'inherit')+'">'+(dl>0?'+':'')+fmtN(+dl.toPrecision(3))+'</b>'+(prev?'<small style="color:'+(dl>0?'var(--crit)':dl<0?'#3d7be0':'inherit')+'">'+(pc>0?'+':'')+Math.round(pc)+'%</small>':'')+'<span>'+(vital?'за период':'изменение')+'</span></div></div><div class="small muted" style="margin-top:6px;text-align:center">'+vs.length+' '+plural(vs.length,'измерение','измерения','измерений')+'</div>';}
     if(vital&&pts.length>140)h+='<div class="small muted" style="text-align:center;margin-top:4px">На графике — средние по неделям</div>';
@@ -1566,7 +1570,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
   if((el=t.closest('[data-medas]'))){const f=(SY.medFresh||[])[+el.dataset.i];if(f)medImport(el.dataset.medas,f);return;}
   if((el=t.closest('[data-ckrem]'))){const p=curP();p.remind=p.remind||{};p.remind[el.dataset.ckrem]=el.dataset.d;persist('p',p.id);openCheck(el.dataset.ckrem.slice(3));render();toast('Напоминание на '+fmtD(el.dataset.d)+'.');return;}
   if((el=t.closest('[data-ck]'))){openCheck(el.dataset.ck);return;}
-  if((el=t.closest('[data-per]'))){indPer=+el.dataset.per;if(el.dataset.perind){const sc=sheet.scrollTop;openIndicator(el.dataset.perind);sheet.scrollTop=sc;}render();return;}
+  if((el=t.closest('[data-per]'))){indPer=+el.dataset.per;if(indPer===-1&&!indFrom&&!indTo){const d=new Date();d.setMonth(d.getMonth()-3);indFrom=ymd(d);indTo=ymd(today());}if(el.dataset.perind){const sc=sheet.scrollTop;openIndicator(el.dataset.perind);sheet.scrollTop=sc;}render();return;}
   if((el=t.closest('[data-normset]'))){openNormSet(el.dataset.normset);return;}
   if((el=t.closest('[data-normsave]'))){const p=curP();const k=el.dataset.normsave;const lo=num($('#nm-lo').value),hi=num($('#nm-hi').value);p.norms=p.norms||{};if(lo==null&&hi==null)delete p.norms[k];else p.norms[k]={lo:lo==null?'':lo,hi:hi==null?'':hi};persist('p',p.id);openIndicator(k);render();toast('Норма сохранена.');return;}
   if((el=t.closest('[data-normreset]'))){const p=curP();const k=el.dataset.normreset;if(p.norms)delete p.norms[k];persist('p',p.id);openIndicator(k);render();return;}
@@ -1608,6 +1612,7 @@ document.addEventListener('input',e=>{const t=e.target;
   if(draft&&draft.kind==='review'){if(t.dataset.rv){draft[t.dataset.rv]=t.value;return;}if(t.dataset.rf){const row=t.closest('[data-ri]');const it=draft.items[+row.dataset.ri];it[t.dataset.rf]=t.value;if(t.dataset.rf==='name')it.code=matchCode(t.value);return;}}
 });
 document.addEventListener('change',e=>{const t=e.target;
+  if(t.dataset.pfrom!==undefined||t.dataset.pto!==undefined){if(t.dataset.pfrom!==undefined)indFrom=t.value;else indTo=t.value;if(t.dataset.perind){const sc=sheet.scrollTop;openIndicator(t.dataset.perind);sheet.scrollTop=sc;}render();return;}
   if(draft&&draft.kind==='doc'&&t.dataset.df){draft.d[t.dataset.df]=t.value;return;}
   if(t.dataset.blank!==undefined&&t.files&&t.files[0]){const f=t.files[0];t.value='';handleBlank(f);return;}
   if(t.dataset.health!==undefined&&t.files&&t.files[0]){const f=t.files[0];t.value='';importHealth(f);return;}
