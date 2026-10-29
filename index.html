@@ -594,7 +594,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='2.5';
+const APP_VER='2.6';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -1578,7 +1578,7 @@ async function medImport(kind,f){const file={id:f.id,name:f.name,mime:f.mime,med
     res.file=file;res.sec=Math.round((Date.now()-t0)/1000);openReview(res);}catch(e){closeSheet();toast('Не получилось прочитать файл.');}}
 function medCard(){if(!(SY.ready&&SY.owner))return '';return '<section class="card"><div class="h"><h2>Папка «Медицина документы»</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Новые бланки и заключения сохраняются туда с понятными именами.</p><div class="row" style="gap:8px"><button type="button" class="btn sm" data-act="mednew">Проверить новые файлы</button><button type="button" class="btn sm" data-act="mednames">Упорядочить названия</button></div></section>';}
 
-const RESTORE_LINES=["Метрика — правила восстановления", "", "Это памятка на случай, если что-то пропадёт: приложение, сервер, бот или таблица.", "Главное: данные живут на вашем Google Диске, а не в приложении. Приложение — только «окно» к ним.", "", "1. Из чего состоит «Метрика»", "", "Часть · Где находится · Что в ней", "Бот · Telegram, @mymetricabot (настройки — @BotFather) · Кнопка «Открыть» запускает приложение", "Приложение · GitHub: github.com/yradkin/metrika, страница yradkin.github.io/metrika · Один файл index.html — интерфейс, без данных", "Сервер · script.google.com, проект «Метрика сервер» (Apps Script) · Принимает и отдаёт данные, распознаёт бланки", "Данные · Google Диск → папка «Метрика» → таблица «Метрика — данные» · Профиль, все анализы, обследования, вес, нормы, напоминания, дневник питания, свои продукты и рецепты", "Файлы · Google Диск → папка «Медицина документы» · Оригиналы бланков, заключений, УЗИ (PDF и фото)", "Резервные копии · Google Диск → «Метрика — резервные копии» · Каждую ночь полный снимок данных в JSON", "Читаемая таблица · Google Диск → «Метрика — все данные (читаемая таблица)» · Всё в человеческом виде, со ссылками на файлы", "Копия приложения · Google Диск → «Метрика — копия приложения (index.html)» · Обновляется каждую ночь с GitHub", "Копии файлов · Mac → Загрузки → metrika-telegram · index.html, текст сервера, тексты бота, аватар, обложка, файл импорта", "", "2. Если пропало приложение (GitHub)", "", "1. Возьмите index.html: Mac → Загрузки → metrika-telegram, или Google Диск → «Метрика — копия приложения (index.html)» (скачать и переименовать в index.html).", "2. GitHub → New repository → имя metrika → Public → Create.", "3. Add file → Upload files → index.html → Commit changes.", "4. Settings → Pages → Branch: main, папка / (root) → Save. Через минуту страница снова работает по тому же адресу.", "5. Если адрес изменился — @BotFather → /mybots → бот → Bot Settings → Configure Mini App и Menu Button → новый адрес.", "", "Данные при этом не теряются: они на Диске.", "", "3. Если пропал сервер (проект Apps Script)", "", "1. Откройте script.new, назовите проект «Метрика сервер».", "2. Вставьте код из файла «СЕРВЕР-метрика-vN-вставить-в-Apps-Script.txt» (самая новая версия; Загрузки → metrika-telegram).", "3. Настройки проекта → Свойства скрипта. Чтобы подключиться к старым данным, а не создать пустые, добавьте:", "   - BOT_TOKEN — токен бота из @BotFather → /mybots → API Token;", "   - GEMINI_KEY — ключ из aistudio.google.com (необязательно);", "   - SHEET_ID, FOLDER_ID, BACKUP_FOLDER_ID, READABLE_ID — возьмите из читаемой таблицы, лист «Технические данные»;", "   - MED_FOLDER_ID — id папки «Медицина документы» (часть ссылки после /folders/).", "4. Выполните функцию setup и разрешите доступ.", "5. Развертывание → Новое развертывание → Веб-приложение → выполнять от «Я», доступ «Все» → скопируйте адрес …/exec.", "6. В index.html найдите строку const SYNC_URL='…', замените адрес на новый и загрузите файл на GitHub (как в пункте 2). Или попросите Claude сделать это.", "7. Владелец определяется по вашему Telegram: откройте приложение первым. Если владельцем записан кто-то другой — выполните в скрипте функцию resetAccess.", "", "4. Если испортились или удалились данные", "", "- Отдельный анализ, документ, продукт или рецепт удалён — в приложении: ⚙️ → «Корзина» → «Вернуть».", "- Что-то изменилось не так — ⚙️ → «Журнал изменений» (кто, что, когда).", "- Нужно откатить всё — ⚙️ → «Резервные копии» → выбрать дату → «Восстановить».", "- Таблица «Метрика — данные» удалена — восстановите её из корзины Google Диска (30 дней) или создайте сервер заново (п. 3) и восстановите из папки «Метрика — резервные копии».", "- Всё пропало, кроме читаемой таблицы и файлов — данные есть в читаемой таблице (листы «Анализы», «Обследования», «Вес», «Питание — записи», «Мои продукты»), а оригиналы — в «Медицина документы». Из них Claude соберёт файл импорта.", "", "5. Если пропал бот", "", "1. @BotFather → /newbot (имя «Метрика»), задайте описание и аватар (тексты и картинки — Загрузки → metrika-telegram).", "2. Новый токен → свойство BOT_TOKEN в Apps Script.", "3. Bot Settings → Configure Mini App и Menu Button → адрес приложения.", "", "Ваш Telegram-аккаунт тот же, поэтому вы останетесь владельцем.", "", "6. Как устроены данные (для технической помощи)", "", "- Таблица «Метрика — данные», лист data: столбцы key, json, updatedAt, by.", "  - p_<id> — профиль: имя, пол, дата рождения (dob), рост (height), вес (wlog: «ГГММДД:кг;…»), свои нормы (norms), напоминания (remind).", "  - a_<id> — анализ: дата, лаборатория, файл бланка, список показателей (code, name, value, unit, lo, hi).", "  - d_<id> — обследование: дата, вид, название, врач, клиника, заключение, рекомендации, файлы.", "  - f_<ГГГГ-ММ-ДД> — дневник питания за день: приём пищи, продукт, граммы, ккал, белки, жиры, углеводы.", "  - m_<id> — свой продукт или рецепт: КБЖУ на 100 г, порции, штрихкод, ингредиенты, фото.", "  - Листы history и log — прошлые версии и журнал изменений.", "- Резервная копия — JSON со всеми ключами и телами; восстанавливается из приложения.", "- Файл импорта (metrika-import) — JSON с массивами tests и docs; загружается через ⚙️ → «Импорт истории».", "", "7. Что регулярно делать", "", "- Раз в несколько месяцев открывайте читаемую таблицу и проверяйте, что она обновляется (лист «Технические данные», строка «Обновлено»).", "- После крупных изменений приложения новые версии index.html и сервера сохраняются в Загрузки → metrika-telegram.", ""];
+const RESTORE_LINES=["Метрика — правила восстановления", "", "Это памятка на случай, если что-то пропадёт: приложение, сервер, бот или таблица.", "Главное: данные живут на вашем Google Диске, а не в приложении. Приложение — только «окно» к ним.", "", "1. Из чего состоит «Метрика»", "", "Часть · Где находится · Что в ней", "Бот · Telegram, @mymetricabot (настройки — @BotFather) · Кнопка «Открыть» запускает приложение", "Приложение · GitHub: github.com/yradkin/metrika, страница yradkin.github.io/metrika · Один файл index.html — интерфейс, без данных", "Сервер · script.google.com, проект «Метрика сервер» (Apps Script) · Принимает и отдаёт данные, распознаёт бланки", "Данные · Google Диск → папка «Метрика» → таблица «Метрика — данные» · Профиль, все анализы, обследования, вес, нормы, напоминания, дневник питания, свои продукты и рецепты", "Файлы · Google Диск → папка «Медицина документы» · Оригиналы бланков, заключений, УЗИ (PDF и фото)", "Резервные копии · Google Диск → «Метрика — резервные копии» · Каждую ночь полный снимок данных в JSON", "Читаемая таблица · Google Диск → «Метрика — все данные (читаемая таблица)» · Всё в человеческом виде, со ссылками на файлы", "Копия приложения · Google Диск → «Метрика — копия приложения (index.html)» · Обновляется каждую ночь с GitHub", "Копии файлов · Mac → Загрузки → metrika-telegram · index.html, текст сервера, тексты бота, аватар, обложка, файл импорта", "", "2. Если пропало приложение (GitHub)", "", "1. Возьмите index.html: Mac → Загрузки → metrika-telegram, или Google Диск → «Метрика — копия приложения (index.html)» (скачать и переименовать в index.html).", "2. GitHub → New repository → имя metrika → Public → Create.", "3. Add file → Upload files → index.html → Commit changes.", "4. Settings → Pages → Branch: main, папка / (root) → Save. Через минуту страница снова работает по тому же адресу.", "5. Если адрес изменился — @BotFather → /mybots → бот → Bot Settings → Configure Mini App и Menu Button → новый адрес.", "", "Данные при этом не теряются: они на Диске.", "", "3. Если пропал сервер (проект Apps Script)", "", "1. Откройте script.new, назовите проект «Метрика сервер».", "2. Вставьте код из файла «СЕРВЕР-метрика-vN-вставить-в-Apps-Script.txt» (самая новая версия; Загрузки → metrika-telegram).", "3. Настройки проекта → Свойства скрипта. Чтобы подключиться к старым данным, а не создать пустые, добавьте:", "   - BOT_TOKEN — токен бота из @BotFather → /mybots → API Token;", "   - GEMINI_KEY — ключ из aistudio.google.com (необязательно);", "   - SHEET_ID, FOLDER_ID, BACKUP_FOLDER_ID, READABLE_ID — возьмите из читаемой таблицы, лист «Технические данные»;", "   - MED_FOLDER_ID — id папки «Медицина документы» (часть ссылки после /folders/).", "4. Выполните функцию setup и разрешите доступ.", "5. Развертывание → Новое развертывание → Веб-приложение → выполнять от «Я», доступ «Все» → скопируйте адрес …/exec.", "6. В index.html найдите строку const SYNC_URL='…', замените адрес на новый и загрузите файл на GitHub (как в пункте 2). Или попросите Claude сделать это.", "7. Владелец определяется по вашему Telegram: откройте приложение первым. Если владельцем записан кто-то другой — выполните в скрипте функцию resetAccess.", "", "4. Если испортились или удалились данные", "", "- Отдельный анализ, документ, продукт или рецепт удалён — в приложении: ⚙️ → «Корзина» → «Вернуть».", "- Что-то изменилось не так — ⚙️ → «Журнал изменений» (кто, что, когда).", "- Нужно откатить всё — ⚙️ → «Резервные копии» → выбрать дату → «Восстановить».", "- Таблица «Метрика — данные» удалена — восстановите её из корзины Google Диска (30 дней) или создайте сервер заново (п. 3) и восстановите из папки «Метрика — резервные копии».", "- Всё пропало, кроме читаемой таблицы и файлов — данные есть в читаемой таблице (листы «Анализы», «Обследования», «Вес», «Питание — записи», «Мои продукты»), а оригиналы — в «Медицина документы». Из них Claude соберёт файл импорта.", "", "5. Если пропал бот", "", "1. @BotFather → /newbot (имя «Метрика»), задайте описание и аватар (тексты и картинки — Загрузки → metrika-telegram).", "2. Новый токен → свойство BOT_TOKEN в Apps Script.", "3. Bot Settings → Configure Mini App и Menu Button → адрес приложения.", "", "Ваш Telegram-аккаунт тот же, поэтому вы останетесь владельцем.", "", "6. Как устроены данные (для технической помощи)", "", "- Таблица «Метрика — данные», лист data: столбцы key, json, updatedAt, by.", "  - p_<id> — профиль: имя, пол, дата рождения (dob), рост (height), вес (wlog: «ГГММДД:кг;…»), свои нормы (norms), напоминания (remind).", "  - a_<id> — анализ: дата, лаборатория, файл бланка, список показателей (code, name, value, unit, lo, hi).", "  - d_<id> — обследование: дата, вид, название, врач, клиника, заключение, рекомендации, файлы.", "  - f_<ГГГГ-ММ-ДД> — дневник питания за день: приём пищи, продукт, граммы, ккал, белки, жиры, углеводы.", "  - m_<id> — свой продукт или рецепт: КБЖУ на 100 г, порции, штрихкод, ингредиенты, фото.", "  - Листы history и log — прошлые версии и журнал изменений.", "- Файл metrika-fooddb.json в папке «Метрика» — база продуктов и брендов из Open Food Facts. Её не нужно восстанавливать: сервер сам пересобирает её раз в две недели.", "- Резервная копия — JSON со всеми ключами и телами; восстанавливается из приложения.", "- Файл импорта (metrika-import) — JSON с массивами tests и docs; загружается через ⚙️ → «Импорт истории».", "", "7. Что регулярно делать", "", "- Раз в несколько месяцев открывайте читаемую таблицу и проверяйте, что она обновляется (лист «Технические данные», строка «Обновлено»).", "- После крупных изменений приложения новые версии index.html и сервера сохраняются в Загрузки → metrika-telegram.", ""];
 /* ---------- Читаемая Google-таблица со всеми данными ---------- */
 const driveLink=(f,t)=>f&&f.id?'=HYPERLINK("https://drive.google.com/file/d/'+f.id+'/view","'+String(t||'открыть').replace(/"/g,"'")+'")':'';
 const grpName=g=>(GROUPS.find(x=>x[0]===g)||[0,'Другое'])[1];
@@ -1885,7 +1885,293 @@ const FOODBASE_RAW=`Крупы и гарниры
 Вино сухое белое|66|0.1|0|0.6|бокал:150
 Водка|235|0|0|0.1|рюмка:50
 Компот|60|0.2|0|15|стакан:250
-Протеиновый коктейль на воде|375|75|5|8|порция:30`;
+Протеиновый коктейль на воде|375|75|5|8|порция:30
+Блюда из птицы
+Куриное филе на гриле|165|31|3.6|0|шт:180|порция:150
+Куриная грудка запечённая|150|29|3|0.3|порция:150
+Куриная грудка на пару|137|29.8|1.8|0.4|порция:150
+Куриное филе в сливочном соусе|170|18|10|3|порция:250
+Куриное филе в панировке жареное|230|22|11|11|порция:150
+Куриные отбивные|200|22|10|6|шт:120
+Куриные котлеты на пару|140|18|6|4|шт:80
+Куриные крылья запечённые|250|20|18|0.5|шт:40|порция:200
+Куриные крылья барбекю|260|19|16|9|шт:45|порция:200
+Курица гриль с кожей|210|20|14|0.5|порция:250
+Куриное бедро жареное с кожей|245|22|17|0.5|шт:110
+Курица с овощами тушёная|110|12|5|4|порция:300
+Курица терияки|175|18|6|12|порция:250
+Курица карри|150|14|8|6|порция:250
+Курица по-французски|210|17|14|4|порция:200
+Жульен с курицей и грибами|160|11|11|4|кокотница:100|порция:150
+Жульен с грибами|140|5|11|5|кокотница:100
+Стрипсы куриные|260|17|14|16|шт:30|порция:150
+Индейка запечённая|140|28|3|0|порция:150
+Стейк из индейки на гриле|150|30|3|0|шт:180
+Индейка тушёная с овощами|105|14|4|4|порция:250
+Котлета из индейки|160|18|8|4|шт:90
+Утка запечённая|300|19|25|0|порция:200
+Блюда из мяса
+Стейк из говядины на гриле (рибай)|260|25|18|0|шт:250
+Стейк из говядины на гриле (постный)|190|29|8|0|шт:200
+Говядина отварная|250|26|16|0|порция:150
+Бефстроганов|200|16|14|4|порция:200
+Гуляш из говядины|150|15|8|4|порция:250
+Жаркое по-домашнему|160|10|9|10|порция:300
+Котлеты говяжьи на пару|180|18|10|5|шт:80
+Тефтели в томатном соусе|160|10|10|8|порция:250
+Свиная отбивная|260|20|19|3|шт:150
+Свиной стейк на гриле|240|25|15|0|шт:200
+Буженина|230|18|17|0|ломтик:30|порция:100
+Рёбрышки свиные запечённые|320|18|27|1|порция:250
+Шашлык из говядины|200|25|10|2|порция:200
+Люля-кебаб|260|17|20|3|шт:100
+Мясо по-французски|230|14|17|6|порция:200
+Ленивые голубцы|130|8|7|9|шт:150
+Перец фаршированный|120|7|6|9|шт:200
+Печень говяжья жареная|200|23|9|6|порция:150
+Сердечки куриные тушёные|160|16|10|1|порция:150
+Сало солёное|770|1.4|85|0|ломтик:15
+Колбаса полукопчёная|380|15|34|1|ломтик:10
+Сардельки|260|10|24|1|шт:90
+Сосиски куриные|220|11|18|3|шт:50
+Паштет печёночный|300|11|27|3|ст.л.:25
+Рыбные блюда
+Лосось на гриле|210|25|12|0|шт:150
+Сёмга слабосолёная|200|22|12|0|ломтик:20
+Форель запечённая|170|24|8|0|шт:150
+Треска запечённая|90|20|1|0|порция:150
+Минтай жареный|130|17|6|2|порция:150
+Хек тушёный с овощами|90|12|3|4|порция:200
+Скумбрия запечённая|230|19|17|0|шт:200
+Рыбные котлеты|170|14|8|11|шт:80
+Рыба под маринадом|120|11|6|6|порция:150
+Дорадо на гриле|150|20|7|0|шт:250
+Сибас запечённый|130|21|5|0|шт:250
+Тунец стейк на гриле|140|29|2|0|шт:150
+Кальмары жареные|175|18|9|5|порция:150
+Мидии в сливочном соусе|130|11|8|4|порция:250
+Креветки жареные в чесночном масле|190|20|12|1|порция:150
+Сельдь с луком и маслом|190|13|15|1|порция:80
+Икра красная|250|31|13|0|ч.л.:7|ст.л.:15
+Белорусская кухня
+Драники со сметаной|200|4|11|21|шт:70
+Мачанка со свининой|250|12|20|5|порция:250
+Колдуны картофельные с мясом|190|8|9|19|шт:100
+Бабка картофельная|170|6|10|15|порция:250
+Клёцки картофельные|120|3|2|23|порция:150
+Верещака|230|15|17|4|порция:250
+Зразы картофельные с мясом|190|8|9|19|шт:120
+Зразы картофельные с грибами|150|4|7|18|шт:120
+Пельмени жареные|300|12|17|25|порция:200
+Галушки|170|5|3|31|порция:200
+Вареники с творогом|200|11|4|30|шт:25|порция:200
+Вареники с вишней|190|4|2|38|шт:25|порция:200
+Ленивые вареники|190|11|6|23|порция:200
+Завтраки
+Омлет с ветчиной и сыром|200|13|16|2|порция:180
+Омлет с овощами|110|7|8|3|порция:200
+Яйцо пашот|143|12.6|9.5|0.7|шт:50
+Шакшука|100|6|7|5|порция:250
+Творожная запеканка|170|14|6|15|порция:150
+Каша рисовая на молоке|110|3|3|17|порция:250
+Каша манная на молоке|100|3|3|15|порция:250
+Каша пшённая на молоке|120|4|3|19|порция:250
+Каша гречневая на молоке|110|4|3|17|порция:250
+Мюсли с молоком|120|4|3|20|порция:250
+Гранола|450|10|17|65|ст.л.:12|порция:50
+Хлопья кукурузные|370|7|1|83|порция:30
+Блинчики с творогом|200|10|8|22|шт:80
+Блинчики с мясом|220|10|11|20|шт:90
+Блинчики со сгущёнкой|260|6|8|40|шт:80
+Панкейки|230|6|8|33|шт:50
+Вафли бельгийские|290|6|14|35|шт:70
+Бутерброд с маслом|330|6|19|34|шт:40
+Бутерброд с сыром|300|11|15|30|шт:50
+Бутерброд с колбасой|290|10|16|27|шт:60
+Сэндвич с ветчиной и сыром|260|13|12|26|шт:150
+Тост с авокадо|200|5|10|22|шт:110
+Салаты и закуски
+Салат «Мимоза»|210|7|18|4|порция:150
+Салат «Крабовый»|200|5|15|11|порция:150
+Салат «Столичный»|200|7|17|6|порция:150
+Салат «Нисуаз»|130|9|8|5|порция:250
+Салат с тунцом|120|11|7|4|порция:200
+Салат с курицей и овощами|110|10|6|4|порция:250
+Салат «Капрезе»|200|11|16|3|порция:200
+Салат из капусты с морковью|60|1.5|3|7|порция:150
+Салат из свёклы с чесноком и майонезом|140|2|11|9|порция:100
+Салат «Витаминный»|50|1.3|2.5|6|порция:150
+Салат с рукколой и креветками|130|10|9|3|порция:200
+Тёплый салат с говядиной|150|12|9|5|порция:250
+Салат «Шопский»|90|4|7|4|порция:200
+Табуле|130|3|6|17|порция:200
+Поке с лососем|150|9|5|17|порция:350
+Поке с курицей|140|10|4|16|порция:350
+Хумус|170|8|10|14|ст.л.:30
+Икра кабачковая|90|1.2|7|7|ст.л.:30
+Лечо|60|1|3|7|порция:150
+Гуакамоле|160|2|15|8|ст.л.:30
+Гарниры
+Картофель запечённый дольками|120|2.5|4|19|порция:200
+Картофель по-деревенски|160|3|7|21|порция:150
+Картофель отварной с маслом и укропом|105|2|3.5|16|порция:200
+Рис басмати варёный|121|3.5|0.4|25|порция:180
+Рис с овощами|120|2.6|3|21|порция:200
+Гречка с грибами|120|4|4|18|порция:200
+Макароны с сыром|200|8|7|26|порция:250
+Пюре из цветной капусты|60|2|3|5|порция:200
+Овощи на гриле|60|1.5|3.5|6|порция:200
+Овощи на пару|35|2|0.3|6|порция:200
+Брокколи на пару|35|2.8|0.4|7|порция:150
+Фасоль стручковая тушёная|45|2|2|5|порция:150
+Капуста тушёная с мясом|100|6|6|5|порция:250
+Спаржа зелёная отварная|22|2.4|0.2|4|порция:150
+Паста, пицца, Азия, фастфуд
+Паста болоньезе|150|7|5|19|порция:300
+Паста с курицей в сливочном соусе|180|10|8|17|порция:300
+Паста с морепродуктами|160|9|6|18|порция:300
+Паста с песто|220|6|11|25|порция:250
+Феттучини Альфредо|200|7|10|21|порция:300
+Ризотто с грибами|130|3|5|18|порция:300
+Пицца «Пепперони»|280|12|12|30|кусок:120
+Пицца «Четыре сыра»|270|12|12|28|кусок:120
+Пицца с ветчиной и грибами|240|11|9|28|кусок:120
+Удон с курицей|120|8|3|15|порция:350
+Лапша вок с курицей|140|8|5|16|порция:350
+Лапша вок с говядиной|150|9|6|16|порция:350
+Рис жареный с яйцом и овощами|160|4|5|25|порция:300
+Пад тай с курицей|160|9|6|18|порция:350
+Том ям с креветками|50|4|2.5|3|порция:350
+Рамен|90|5|3|11|порция:500
+Роллы с огурцом|120|3|0.3|26|шт:25
+Ролл с угрём|180|7|6|25|шт:35
+Ролл запечённый|200|7|9|22|шт:40
+Ролл темпура|230|7|11|25|шт:40
+Хинкали|220|10|11|20|шт:60
+Манты|200|10|10|18|шт:60
+Лагман|110|6|4|12|порция:400
+Чебурек|290|9|17|26|шт:130
+Беляш|260|11|14|23|шт:120
+Самса с мясом|300|11|17|27|шт:120
+Хачапури по-аджарски|300|12|15|29|шт:350
+Хачапури по-имеретински|290|11|14|29|кусок:100
+Шаурма с говядиной|220|11|11|19|шт:350
+Фалафель|330|13|18|32|шт:20
+Буррито с курицей|190|10|7|22|шт:300
+Кесадилья с курицей|240|13|11|23|шт:200
+Тако|220|10|11|20|шт:100
+Хот-дог|260|9|14|25|шт:150
+Сэндвич клаб|220|12|10|20|шт:250
+Бургер с курицей|230|12|10|23|шт:200
+Большой бургер с говядиной|245|12|12|20|шт:215
+Двойной чизбургер|270|15|14|21|шт:170
+Сосиска в тесте|300|10|17|27|шт:90
+Супы
+Суп-пюре тыквенный|60|1.5|3|7|порция:300
+Суп-пюре из брокколи|50|2|2.5|5|порция:300
+Суп сырный|70|3|4|5|порция:300
+Суп с фрикадельками|50|3|2.5|4|порция:350
+Рассольник|45|2|2|5|порция:350
+Уха|45|5|1.5|3|порция:350
+Харчо|75|5|4|6|порция:350
+Суп грибной с картофелем|35|1.3|1.5|4.5|порция:350
+Бульон куриный|20|2|1.2|0.3|порция:300
+Суп фасолевый|60|3.5|1.5|8|порция:350
+Минестроне|45|2|1.5|6.5|порция:350
+Гаспачо|40|1|2|5|порция:300
+Выпечка и десерты
+Шарлотка|210|4.5|5|37|кусок:100
+Чизкейк «Нью-Йорк»|320|6|22|25|кусок:120
+Тирамису|300|6|20|25|порция:120
+Торт «Наполеон»|360|5|22|36|кусок:120
+Торт «Медовик»|420|6|19|56|кусок:110
+Эклер с заварным кремом|260|5|15|27|шт:60
+Маффин шоколадный|420|6|20|54|шт:100
+Брауни|440|5|25|50|кусок:70
+Пирожное «Картошка»|380|6|17|52|шт:60
+Булочка с корицей|330|6|12|50|шт:100
+Ватрушка с творогом|280|10|9|40|шт:100
+Пирожок печёный с вишней|230|5|5|42|шт:70
+Пирожок печёный с мясом|260|11|10|31|шт:80
+Слойка с яблоком|330|5|17|40|шт:90
+Пончик глазированный|420|5|22|50|шт:60
+Кекс с изюмом|380|6|17|52|кусок:70
+Мороженое эскимо в шоколаде|330|3.5|22|30|шт:70
+Сорбет|130|0.5|0|32|шар:70
+Панакота|230|3|16|18|порция:120
+Желе фруктовое|80|1.5|0|18|порция:150
+Халва подсолнечная|520|12|30|54|порция:30
+Молоко сгущённое с сахаром|320|7|8.5|56|ст.л.:30
+Мармелад|320|0|0|80|шт:8
+Вафли|530|4|30|62|шт:20
+Сушки|340|11|1.3|72|шт:10
+Крекер|440|10|13|70|шт:5
+Сухарики|400|11|8|70|пачка:40
+Арахис солёный|600|26|50|15|горсть:30
+Молочные продукты (ещё)
+Молоко 6%|84|3|6|4.7|стакан:200
+Сливки 20%|205|2.8|20|3.7|ст.л.:15
+Простокваша 3,2%|59|2.9|3.2|4.1|стакан:200
+Снежок|90|2.8|2.5|14|стакан:200
+Йогурт питьевой 1,5%|60|3|1.5|8|бутылка:290
+Айран|25|1.3|1.5|1.5|стакан:250
+Сырок творожный глазированный|410|8|27|33|шт:45
+Творожная масса с изюмом|340|7|23|26|порция:100
+Сыр пармезан|392|35.8|25.8|3.2|ст.л.:6
+Сыр бри|330|21|28|0.5|ломтик:20
+Сыр сулугуни|285|20|22|0.5|ломтик:20
+Брынза|260|18|20|0.5|ломтик:20
+Сыр рикотта|174|11|13|3|ст.л.:25
+Сыр маскарпоне|420|4.5|42|4|ст.л.:25
+Сыр сливочный 70%|340|6|34|3|ст.л.:25
+Сыр твёрдый лёгкий 17%|260|30|17|0|ломтик:20
+Овощи, фрукты, орехи (ещё)
+Редис|20|1.2|0.1|3.4|шт:15
+Сельдерей стебель|16|0.7|0.2|3|шт:40
+Руккола|25|2.6|0.7|3.7|пучок:30
+Капуста пекинская|16|1.2|0.2|3.2|лист:30
+Фасоль стручковая|31|1.8|0.2|7|порция:150
+Батат|86|1.6|0.1|20|шт:200
+Голубика|57|0.7|0.3|14.5|стакан:150
+Манго|60|0.8|0.4|15|шт:300
+Гранат|83|1.7|1.2|19|шт:250
+Абрикос|44|0.9|0.1|9|шт:30
+Нектарин|44|1|0.3|10|шт:140
+Черешня|52|1.1|0.4|11|стакан:150
+Смородина чёрная|44|1|0.4|7.3|стакан:120
+Фисташки|560|20|45|28|горсть:30
+Кедровые орехи|675|14|68|13|ст.л.:10
+Семечки тыквенные|560|30|49|11|ст.л.:10
+Семена льна|534|18|42|29|ст.л.:10
+Кокосовая стружка|660|7|65|24|ст.л.:6
+Соусы
+Соус сметанный|170|2.5|15|6|ст.л.:20
+Соус сырный|260|8|22|8|ст.л.:20
+Соус тартар|420|1|45|3|ст.л.:20
+Соус песто|420|5|42|5|ст.л.:15
+Соус барбекю|170|1|0.5|40|ст.л.:20
+Соус терияки|90|5|0|17|ст.л.:18
+Соус томатный для пасты|60|1.5|2|8|порция:100
+Соус чесночный|340|1.5|35|5|ст.л.:20
+Напитки (ещё)
+Чай с сахаром|30|0|0|7.5|кружка:250
+Кофе с молоком|35|1.5|1.5|3|чашка:200
+Какао на молоке|80|3.5|3|10|кружка:250
+Раф|110|2|8|8|стакан:300
+Флэт уайт|45|2.5|2.3|3.5|стакан:200
+Молочный коктейль|110|3|3.5|17|стакан:300
+Смузи фруктовый|60|1|0.3|14|стакан:300
+Морс клюквенный|40|0|0|10|стакан:250
+Квас|27|0.2|0|5.2|стакан:250
+Лимонад|40|0|0|10|стакан:250
+Энергетик|45|0|0|11|банка:250
+Пиво тёмное|50|0.5|0|5.7|бутылка:500
+Пиво безалкогольное|26|0.3|0|5.5|бутылка:500
+Сидр|50|0|0|5|бутылка:500
+Вино полусладкое|80|0.2|0|4|бокал:150
+Шампанское брют|70|0.2|0|1.5|бокал:150
+Коньяк|240|0|0|0.1|рюмка:40
+Виски|250|0|0|0|рюмка:40`;
 const FOODBASE=(()=>{const out=[];let cat='';FOODBASE_RAW.split('\n').forEach(l=>{if(!l.includes('|')){cat=l.trim();return;}const a=l.split('|');
   out.push({id:'b'+out.length,kind:'base',cat,name:a[0],per:{k:+a[1],p:+a[2],f:+a[3],c:+a[4]},units:a.slice(5).map(u=>{const[x,g]=u.split(':');return {n:x,g:+g};})});});return out;})();
 /* ---------- Питание: дневник, продукты, рецепты, штрихкоды, отчёты ---------- */
@@ -1901,6 +2187,23 @@ const r0=v=>Math.round(+v||0);
 const fN=v=>(+v||0).toLocaleString('ru-RU',{maximumFractionDigits:1});
 const fT=v=>fN(Math.abs(+v||0)>=100?Math.round(+v||0):r1(v));
 const BASE_BY={};FOODBASE.forEach(b=>{b.id='b:'+b.name;BASE_BY[b.id]=b;});
+/* ---------- база продуктов и брендов (Open Food Facts) — хранится на телефоне в IndexedDB ---------- */
+const FDB={rows:null,n:null,byCode:null,at:0,busy:false,loading:false,err:''};
+function idbOpen(){return new Promise((res,rej)=>{try{const r=indexedDB.open('metrika',1);r.onupgradeneeded=()=>{try{r.result.createObjectStore('kv');}catch(e){}};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}catch(e){rej(e);}});}
+async function kvGet(k){try{const db=await idbOpen();return await new Promise(res=>{const t=db.transaction('kv').objectStore('kv').get(k);t.onsuccess=()=>res(t.result);t.onerror=()=>res(null);});}catch(e){return null;}}
+async function kvSet(k,v){try{const db=await idbOpen();await new Promise(res=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=res;t.onerror=res;});}catch(e){}}
+function fdbSet(v){FDB.rows=v.rows;FDB.at=v.at;FDB.n=v.rows.map(r=>nrm(r[1]+' '+r[2]));FDB.byCode={};v.rows.forEach((r,i)=>{FDB.byCode[r[0]]=i;});}
+async function fdbLoad(){if(FDB.rows||FDB.loading)return;FDB.loading=true;const v=await kvGet('fooddb');if(v&&Array.isArray(v.rows))fdbSet(v);FDB.loading=false;fdbRefresh(false);}
+async function fdbRefresh(force){if(FDB.busy||!SY.ready)return;const last=+lsGet('metrika-fdb-check')||0;if(!force&&FDB.rows&&Date.now()-last<864e5)return;
+  FDB.busy=true;FDB.err='';if(sheetKind==='fadd')refreshAddResults();
+  try{const r=await api('fooddb',{at:FDB.rows?FDB.at:0,force:!!force});lsSet('metrika-fdb-check',String(Date.now()));if(r.rows){fdbSet(r);kvSet('fooddb',{at:r.at,rows:r.rows});}}
+  catch(e){FDB.err=e.code==='bad_op'?'old':'fail';}finally{FDB.busy=false;}if(sheetKind==='fadd')refreshAddResults();}
+function fdbSrc(i){const r=FDB.rows[i];const units=[];if(r[7])units.push({n:'порция',g:r[7]});if(r[8]&&r[8]!==r[7])units.push({n:'упаковка',g:r[8]});
+  const o={name:r[1],brand:r[2],code:/^(00)?9999/.test(r[0])?'':r[0],per:{k:r[3],p:r[4],f:r[5],c:r[6]},units};return {ref:'',name:r[1],brand:r[2],per:o.per,units,kind:'off',off:o,by:/^481/.test(r[0])};}
+function fdbSearch(q,words,lim){if(!FDB.rows)return [];const out=[];const n=FDB.n;for(let i=0;i<n.length;i++){const x=n[i];let ok=true;for(const w of words){if(!x.includes(w)){ok=false;break;}}if(ok)out.push(i);}
+  const sc=i=>{const x=n[i];return (x.startsWith(q)?0:x.startsWith(words[0])?1:(' '+x).includes(' '+words[0])?2:3)*1000-(/^481/.test(FDB.rows[i][0])?500:0)+x.length;};
+  return out.sort((a,b)=>sc(a)-sc(b)).slice(0,lim).map(fdbSrc);}
+const stemW=w=>w.length>=7?w.slice(0,-2):w.length>=5?w.slice(0,-1):w;
 const nrm=s=>String(s||'').toLowerCase().replace(/ё/g,'е').replace(/[«»"(),.]/g,' ').replace(/\s+/g,' ').trim();
 function dayItems(d){const x=st.days[d];return x&&Array.isArray(x.items)?x.items:[];}
 function sumItems(a){const s={k:0,p:0,f:0,c:0};a.forEach(i=>{s.k+=+i.k||0;s.p+=+i.p||0;s.f+=+i.f||0;s.c+=+i.c||0;});return s;}
@@ -1937,7 +2240,7 @@ function foodGoal(p){const g=(p&&p.food)||{};const w=(wlogGet(p).slice(-1)[0]||{
 function streakOf(){let n=0;let d=ymd(today());if(!dayItems(d).length)d=addDays(d,-1);while(dayItems(d).length){n++;d=addDays(d,-1);}return n;}
 
 /* ---------- экран «Питание» ---------- */
-function foodHTML(){const p=curP();
+function foodHTML(){const p=curP();setTimeout(fdbLoad,0);
   let h='<div class="seg" role="group">'+[['diary','Дневник'],['rep','Отчёт'],['lib','Мои продукты']].map(([k,l])=>'<button type="button" data-fseg="'+k+'" aria-pressed="'+(foodSeg===k)+'">'+l+'</button>').join('')+'</div>';
   if(foodSeg==='rep')return h+reportHTML(p);
   if(foodSeg==='lib')return h+libHTML();
@@ -1969,18 +2272,19 @@ function foodHomeCard(p){const G=foodGoal(p);const d=ymd(today());const S=sumIte
     '<button type="button" class="fplus" data-fadd="'+mealNow()+'" data-fhome="1" aria-label="Добавить еду">'+ICON.plus+'</button></div></section>';}
 
 /* ---------- добавление: поиск, частые, мои, рецепты, база ---------- */
-function openFoodAdd(meal,keep){if(meal)FD.meal=meal;if(!keep){FD.q='';FD.off=null;FD.offQ='';}FD.pick=FD.pick||false;renderFoodAdd();}
-const CAT_EM={'Крупы и гарниры':'🍚','Хлеб и выпечка':'🍞','Молочные продукты и яйца':'🥛','Мясо и птица':'🍗','Рыба и морепродукты':'🐟','Овощи':'🥦','Фрукты и ягоды':'🍎','Орехи, семена, масла':'🥜','Сладкое и перекусы':'🍫','Супы':'🍜','Готовые блюда':'🍝','Напитки':'☕'};
+function openFoodAdd(meal,keep){fdbLoad();if(meal)FD.meal=meal;if(!keep){FD.q='';FD.off=null;FD.offQ='';}FD.pick=FD.pick||false;renderFoodAdd();}
+const CAT_EM={'Крупы и гарниры':'🍚','Хлеб и выпечка':'🍞','Молочные продукты и яйца':'🥛','Мясо и птица':'🍗','Рыба и морепродукты':'🐟','Овощи':'🥦','Фрукты и ягоды':'🍎','Орехи, семена, масла':'🥜','Сладкое и перекусы':'🍫','Супы':'🍜','Готовые блюда':'🍝','Напитки':'☕','Блюда из птицы':'🍗','Блюда из мяса':'🥩','Рыбные блюда':'🐟','Белорусская кухня':'🥔','Завтраки':'🍳','Салаты и закуски':'🥗','Гарниры':'🍚','Паста, пицца, Азия, фастфуд':'🍕','Выпечка и десерты':'🍰','Молочные продукты (ещё)':'🧀','Овощи, фрукты, орехи (ещё)':'🥕','Соусы':'🥫','Напитки (ещё)':'🥤'};
 const srcEmoji=s=>s.kind==='recipe'?'🥘':s.kind==='off'?'🌍':s.kind==='base'?(CAT_EM[s.cat]||'🍽'):s.kind==='food'?'🥫':'🕘';
 function srcRow(s,extra,i){const a=extra&&extra.amt;const kc=a?r0(s.per.k*a.g/100):r0(s.per.k);
-  return '<div class="frow" data-fsrc="'+i+'">'+(s.photo?'<img class="fph" src="'+s.photo+'" alt="">':'<span class="fph">'+srcEmoji(s)+'</span>')+'<div style="min-width:0"><div class="t">'+esc(s.name)+(s.fav?' <span style="color:#e2a400">★</span>':'')+'</div><div class="s">'+(s.brand?esc(s.brand)+' · ':'')+(a?(a.u&&a.u!=='г'?fN(a.q)+' '+esc(a.u):fN(a.g)+' г')+' · '+kc+' ккал':'100 г · '+kc+' ккал')+(extra&&extra.n?' · '+extra.n+'×':'')+'</div></div><button type="button" class="fplus sm" data-fquick="'+i+'" aria-label="Добавить сразу">'+ICON.plus+'</button></div>';}
-function addLists(){const U=usage();const q=nrm(FD.q);const words=q?q.split(' '):[];const hit=n=>{const x=nrm(n);return words.every(w=>x.includes(w));};
+  return '<div class="frow" data-fsrc="'+i+'">'+(s.photo?'<img class="fph" src="'+s.photo+'" alt="">':'<span class="fph">'+srcEmoji(s)+'</span>')+'<div style="min-width:0"><div class="t">'+esc(s.name)+(s.fav?' <span style="color:#e2a400">★</span>':'')+'</div><div class="s">'+(s.by?'🇧🇾 ':'')+(s.brand?esc(s.brand)+' · ':'')+(a?(a.u&&a.u!=='г'?fN(a.q)+' '+esc(a.u):fN(a.g)+' г')+' · '+kc+' ккал':'100 г · '+kc+' ккал')+(extra&&extra.n?' · '+extra.n+'×':'')+'</div></div><button type="button" class="fplus sm" data-fquick="'+i+'" aria-label="Добавить сразу">'+ICON.plus+'</button></div>';}
+function addLists(){const U=usage();const q=nrm(FD.q);const words=q?q.split(' ').map(stemW):[];const hit=n=>{const x=nrm(n);return words.every(w=>x.includes(w));};
   const score=n=>{const x=nrm(n);return (x.startsWith(q)?0:x.split(' ').some(w=>w.startsWith(words[0]))?1:2)*1000+x.length;};
   const mine=myFoods().map(f=>Object.assign(srcOf(f),{fav:!!f.fav}));
   if(q){const a=mine.filter(s=>hit(s.name+' '+s.brand)).sort((x,y)=>score(x.name)-score(y.name));
     const u=Object.values(U).filter(x=>!x.it.ref&&hit(x.it.name)).map(x=>srcFromItem(x.it));
     const b=FOODBASE.filter(f=>hit(f.name)).sort((x,y)=>score(x.name)-score(y.name)).map(srcOf);
-    return {groups:[['Мои продукты и рецепты',a.concat(u)],['Базовые продукты',b.slice(0,40)]].concat(FD.off&&FD.offQ===FD.q?[['Open Food Facts',FD.off]]:[]),U};}
+    const br=fdbSearch(q,words,40);
+    return {groups:[['Мои продукты и рецепты',a.concat(u)],['Блюда и базовые продукты',b.slice(0,br.length?15:40)],['Продукты и бренды',br]].concat(FD.off&&FD.offQ===FD.q?[['Ещё из Open Food Facts',FD.off.filter(o=>!br.some(x=>x.off.code&&x.off.code===o.off.code))]]:[]),U};}
   if(FD.seg==='freq'){const arr=Object.values(U).sort((x,y)=>{const mx=(y.meals[FD.meal]||0)-(x.meals[FD.meal]||0);return (y.n+(y.meals[FD.meal]||0)*2)-(x.n+(x.meals[FD.meal]||0)*2)||mx;}).slice(0,30).map(x=>Object.assign(srcFromItem(x.it),{n:x.n}));
     const favs=mine.filter(s=>s.fav&&!arr.some(a=>a.ref===s.ref));return {groups:[['Избранное',favs],['Часто едите',arr]],U};}
   if(FD.seg==='mine')return {groups:[['Мои продукты',mine.filter(s=>s.kind!=='recipe').sort((a,b)=>(b.fav-a.fav)||a.name.localeCompare(b.name,'ru'))]],U};
@@ -1989,6 +2293,7 @@ function addLists(){const U=usage();const q=nrm(FD.q);const words=q?q.split(' ')
 function addBodyHTML(){const L=addLists();FD.list=[];
   let body='';L.groups.forEach(([t,arr])=>{if(!arr.length)return;body+='<div class="yr" style="margin:6px 2px 0">'+esc(t)+'</div><section class="card" style="padding:4px 14px"><div class="list">'+arr.map(x=>{const i=FD.list.push(x)-1;return srcRow(x,{amt:(FD.seg==='freq'&&!FD.q)||x.kind==='item'?lastAmount(x,L.U):null,n:FD.q?0:x.n},i);}).join('')+'</div></section>';});
   if(!body)body='<section class="card"><div class="empty">'+(FD.q?'Среди своих и базовых продуктов не нашлось.':FD.seg==='freq'?'Здесь появятся продукты, которые вы едите чаще всего, — для ввода в одно касание.':FD.seg==='rec'?'Рецептов пока нет. Соберите блюдо из продуктов — и вводите его одной строкой.':'Своих продуктов пока нет. Отсканируйте штрихкод или создайте продукт.')+'</div></section>';
+  if(FD.q&&!FDB.rows)body+='<p class="note" style="text-align:center">'+(FDB.busy?'Загружаю базу продуктов и брендов — один раз, около минуты…':FDB.err==='old'?'Обновите сервер до v7 — появится база брендов.':'База брендов загрузится, когда будет связь с сервером.')+'</p>';
   if(FD.q)body+=FD.offBusy?'<section class="card" style="text-align:center"><div class="spin"></div><div class="small muted">Ищу в Open Food Facts…</div></section>':(FD.offQ===FD.q&&FD.off&&!FD.off.length?'<p class="note" style="text-align:center">В Open Food Facts тоже не нашлось.</p>':FD.offQ!==FD.q?'<button type="button" class="btn block" data-foff>🌍 Искать «'+esc(FD.q)+'» в Open Food Facts</button>':'');
   return body;}
 function renderFoodAdd(){const d=foodDate;const inMeal=dayItems(d).filter(i=>i.meal===FD.meal);const s=sumItems(inMeal);
@@ -2004,7 +2309,7 @@ function topF(title,backAttr,right){return '<div class="sheet-top"><button type=
 function quickAdd(s){const a=lastAmount(s);if(FD.pick){addIng(s,a.g,a.q,a.u);return;}const it=addEntry(foodDate,FD.meal,s,a.g,a.q,a.u);haptic('ok');render();renderFoodAdd();
   toast('+ '+s.name+' · '+r0(it.k)+' ккал','Отменить',()=>{delEntry(foodDate,it.id);render();if(sheetKind==='fadd')renderFoodAdd();});}
 async function pickSrc(s){if(s.off){const f=saveOffFood(s.off);s=srcOf(f);}openAmount({src:s});}
-function saveOffFood(o){const ex=o.code&&myFoods().find(f=>f.code===o.code);if(ex)return ex;const f={id:uid(),kind:'food',name:o.name||('Продукт '+o.code),brand:o.brand||'',code:o.code||'',per:o.per,units:o.units||[],src:'off',created:Date.now()};st.foods[f.id]=f;persist('m',f.id);return f;}
+function saveOffFood(o){const ex=(o.code&&myFoods().find(f=>f.code===o.code))||myFoods().find(f=>f.src==='off'&&f.name===o.name&&(f.brand||'')===(o.brand||''));if(ex)return ex;const f={id:uid(),kind:'food',name:o.name||('Продукт '+o.code),brand:o.brand||'',code:o.code||'',per:o.per,units:o.units||[],src:'off',created:Date.now()};st.foods[f.id]=f;persist('m',f.id);return f;}
 
 /* ---------- количество ---------- */
 function openAmount(o){const s=o.src;let a;if(o.entry)a={u:o.entry.u||'г',q:+o.entry.q||+o.entry.g};else a=lastAmount(s);
@@ -2150,7 +2455,8 @@ async function decodeImage(file){const det=await nativeDetector();
   if(det){try{const bm=await createImageBitmap(file);const r=await det.detect(bm);if(r&&r[0])return r[0].rawValue;}catch(e){}}
   try{const Z=await loadZXing();const url=await shrinkImg(file,1600,.92);const rd=zxReader(Z);const r=await rd.decodeFromImageUrl(url);return r?(r.getText?r.getText():r.text):null;}catch(e){return null;}}
 async function lookupBarcode(code){code=String(code||'').replace(/\D/g,'');if(code.length<6){toast('Не похоже на штрихкод.');return;}
-  const mine=myFoods().find(f=>f.code===code);if(mine){if(FD.libMode){editFood(mine.id);return;}openAmount({src:srcOf(mine)});return;}
+  await fdbLoad();const mine=myFoods().find(f=>f.code===code);if(mine){if(FD.libMode){editFood(mine.id);return;}openAmount({src:srcOf(mine)});return;}
+  if(FDB.rows&&FDB.byCode[code]!=null){const f=saveOffFood(fdbSrc(FDB.byCode[code]).off);if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}
   openSheet(topF('Штрихкод '+code,'data-close')+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div><p class="small muted" style="margin:8px 0 0">Ищу в Open Food Facts…</p></section></div>','fbusy');
   const r=await offGet(code);if(sheetKind!=='fbusy')return;
   if(r&&r.name){const f=saveOffFood(r);toast('Нашёл: '+f.name+'. Сохранил в «Мои продукты».');if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}
@@ -2161,18 +2467,17 @@ const OFF_F='code,product_name,product_name_ru,generic_name,brands,nutriments,se
 function offMap(p){if(!p)return null;const n=p.nutriments||{};let k=num(n['energy-kcal_100g']);if(k==null&&num(n.energy_100g)!=null)k=num(n.energy_100g)/4.184;
   const per={k:r1(k||0),p:r1(num(n.proteins_100g)||0),f:r1(num(n.fat_100g)||0),c:r1(num(n.carbohydrates_100g)||0)};
   if(k==null&&!per.p&&!per.f&&!per.c)return null;if(k==null)per.k=r1(per.p*4+per.f*9+per.c*4);
-  const units=[];const sq=num(p.serving_quantity);if(sq&&sq>0&&sq<2000)units.push({n:'порция',g:r1(sq)});const qq=String(p.quantity||'').match(/(\d+(?:[.,]\d+)?)\s*(g|г|гр|ml|мл)\b/i);if(qq){const v=num(qq[1]);if(v&&v<5000&&!units.some(u=>u.g===v))units.push({n:'упаковка',g:v});}
+  const units=[];const sq=num(p.serving_quantity);if(sq&&sq>0&&sq<2000)units.push({n:'порция',g:r1(sq)});const qq=String(p.quantity||'').match(/(\d+(?:[.,]\d+)?)\s*(kg|кг|g|г|гр|l|л|ml|мл)(?![a-zа-яё])/i);if(qq){const v=num(qq[1])*(/^(kg|кг|l|л)$/i.test(qq[2])?1000:1);if(v&&v<5000&&!units.some(u=>u.g===v))units.push({n:'упаковка',g:v});}
   return {name:String(p.product_name_ru||p.product_name||p.generic_name||'').trim(),brand:String(p.brands||'').split(',')[0].trim(),code:String(p.code||''),per,units};}
 async function offGet(code){
   try{const r=await fetch('https://world.openfoodfacts.org/api/v2/product/'+code+'.json?fields='+OFF_F);if(r.status===404)return false;if(r.ok){const j=await r.json();return j&&j.status===1&&j.product?(offMap(Object.assign({code},j.product))||false):false;}}catch(e){}
   if(SY.ready){try{const r=await api('off',{code});return r.product?(offMap(r.product)||false):false;}catch(e){}}
   return null;}
 async function offSearch(q){
-  try{const r=await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=30&lc=ru&fields='+OFF_F);if(r.ok){const j=await r.json();return (j.products||[]).map(offMap).filter(x=>x&&x.name);}}catch(e){}
   if(SY.ready){try{const r=await api('off',{q});return (r.products||[]).map(offMap).filter(x=>x&&x.name);}catch(e){}}
   return null;}
 async function runOffSearch(){const q=FD.q;if(!q)return;FD.offBusy=true;refreshAddResults();const res=await offSearch(q);FD.offBusy=false;
-  if(res===null){toast('Нет связи с Open Food Facts.');refreshAddResults();return;}FD.off=res.map(o=>({ref:'',name:o.name,brand:o.brand,per:o.per,units:o.units,kind:'off',off:o}));FD.offQ=q;if(sheetKind==='fadd')refreshAddResults();}
+  if(res===null){toast(SY.ready?'Open Food Facts сейчас не отвечает.':'Поиск в Open Food Facts работает через сервер — нет связи.');refreshAddResults();return;}FD.off=res.map(o=>({ref:'',name:o.name,brand:o.brand,per:o.per,units:o.units,kind:'off',off:o}));FD.offQ=q;if(sheetKind==='fadd')refreshAddResults();}
 
 /* ---------- фото: этикетка → КБЖУ, блюдо → оценка ---------- */
 async function readLabel(file){toast('Читаю этикетку…');try{const data=await shrinkImg(file,1400,.85);const r=await api('food_read',{data,mode:'label'});const x=r.food||{};const f=FD.food;if(!f)return;
