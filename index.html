@@ -494,7 +494,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='1.2';
+const APP_VER='1.3';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -812,17 +812,20 @@ function shrinkImg(file,max,q){return new Promise((res,rej)=>{const url=URL.crea
 const readAsDataURL=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});
 async function handleBlank(file){const p=curP();
   if(!SY.ready){toast('Распознавание доступно в Telegram после подключения сервера.');return;}
-  openSheet(top('Распознаю бланк')+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div><p class="small" style="margin:8px 0 0;color:var(--txt-2)">Сохраняю бланк и читаю текст. Обычно 10–30 секунд.</p></section></div>','busy');
+  openSheet(top('Распознаю бланк')+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div><p class="small" style="margin:8px 0 0;color:var(--txt-2)"><span id="rcStage">Готовлю фото…</span> <b id="rcSec"></b></p><p class="note" style="margin:6px 0 0">Можно не ждать на этом экране — но не закрывайте приложение.</p></section></div>','busy');
+  const t0=Date.now();const tick=setInterval(()=>{const el=$('#rcSec');if(!el){clearInterval(tick);return;}el.textContent=Math.round((Date.now()-t0)/1000)+' с';},1000);
+  const stage=t=>{const el=$('#rcStage');if(el)el.textContent=t;};
   try{let data,mime=file.type||'';
     if(/pdf/i.test(mime)||/\.pdf$/i.test(file.name)){if(file.size>9*1024*1024)throw new Error('big');data=await readAsDataURL(file);mime='application/pdf';}
-    else{data=await shrinkImg(file,2200,.88);mime='image/jpeg';}
+    else{data=await shrinkImg(file,1600,.8);mime='image/jpeg';}
+    stage(SY.ai?'Отправляю и распознаю нейросетью…':'Отправляю и читаю текст…');
     const id=uid();const r=await api('recognize',{id,data,name:'Бланк '+(p.name||'')+' '+ymd(new Date())});
     let res;if(r.mode==='ai'&&r.ai)res=fromAI(r.ai);else if(r.mode==='ocr')res=parseOCR(r.text||'');else res={items:[],date:'',lab:''};
-    res.file=r.file;res.mode=r.mode;res.raw=r.mode==='ocr'?(r.text||''):'';
-    openReview(res);
+    res.file=r.file;res.mode=r.mode;res.raw=r.mode==='ocr'?(r.text||''):'';res.sec=Math.round((Date.now()-t0)/1000);res.aiError=r.aiError||'';
+    clearInterval(tick);openReview(res);
     if(r.mode==='none')toast('Не удалось прочитать текст. Бланк сохранён — введите показатели вручную.');
     else if(!res.items.length)toast('Показатели не нашлись. Проверьте фото или введите вручную.');
-  }catch(e){closeSheet();toast(e.message==='big'?'PDF больше 9 МБ — сделайте фото страниц.':'Не получилось распознать: проверьте интернет и попробуйте ещё раз.');}}
+  }catch(e){clearInterval(tick);closeSheet();toast(e.message==='big'?'PDF больше 9 МБ — сделайте фото страниц.':'Не получилось распознать: проверьте интернет и попробуйте ещё раз.');}}
 function matchCode(name){const s=' '+String(name||'').toLowerCase().replace(/ё/g,'е')+' ';
   for(const [a,code] of AL){const re=new RegExp('(^|[^a-zа-я0-9])'+a.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/ё/g,'е')+'([^a-zа-я0-9]|$)','i');if(re.test(s))return code;}return null;}
 function fromAI(ai){const items=(ai.items||[]).map(x=>{const code=matchCode(x.name);return {id:uid(),code,name:code?CAT[code].name:String(x.name||'').trim(),value:num(x.value)!=null?num(x.value):String(x.value||''),unit:x.unit||(code?CAT[code].unit:''),lo:x.lo==null?'':x.lo,hi:x.hi==null?'':x.hi,ref:x.ref||'',on:true};});
@@ -858,12 +861,12 @@ function parseOCR(text){
   const labs=['Синэво','Synevo','Инвитро','Invitro','Хеликс','Helix','ЛОДЭ','Lode','Синлаб','Synlab','Гемотест','CMD','Кдл','KDL','Медэкспресс','Нордин','Мой доктор'];
   const lab=labs.find(l=>new RegExp(l,'i').test(text))||'';
   return {items,date,lab};}
-function openReview(res){const p=curP();draft={kind:'review',date:res.date||ymd(today()),lab:res.lab||'',note:'',file:res.file||null,items:res.items||[],raw:res.raw||'',mode:res.mode||'manual',pid:p.id};renderReview();}
+function openReview(res){const p=curP();draft={kind:'review',date:res.date||ymd(today()),lab:res.lab||'',note:'',file:res.file||null,items:res.items||[],raw:res.raw||'',mode:res.mode||'manual',sec:res.sec||0,aiError:res.aiError||'',pid:p.id};renderReview();}
 function renderReview(){const d=draft;const p=st.profiles[d.pid]||curP();
   const ok=d.items.filter(x=>x.on).length;
   let h=top(d.edit?'Изменить анализ':'Проверьте анализ')+'<div class="stack">';
-  if(d.mode==='ocr')h+='<p class="note" style="margin:0">Распознано по тексту бланка. Сверьте цифры с бланком: ошибки распознавания бывают. Снимите галочку с лишнего.</p>';
-  if(d.mode==='ai')h+='<p class="note" style="margin:0">Распознано нейросетью. Сверьте значения с бланком перед сохранением.</p>';
+  if(d.mode==='ocr')h+='<p class="note" style="margin:0">Распознано по тексту бланка'+(d.sec?' за '+d.sec+' с':'')+'. Сверьте цифры с бланком: ошибки распознавания бывают. Снимите галочку с лишнего.'+(d.aiError?'<br>Нейросеть не ответила: '+esc(d.aiError.slice(0,140)):'')+'</p>';
+  if(d.mode==='ai')h+='<p class="note" style="margin:0">Распознано нейросетью'+(d.sec?' за '+d.sec+' с':'')+'. Сверьте значения с бланком перед сохранением.</p>';
   h+='<section class="card"><div class="grid2"><div class="fld"><label for="rv-date">Дата анализа</label><input id="rv-date" type="date" data-rv="date" value="'+esc(d.date)+'"></div><div class="fld"><label for="rv-lab">Лаборатория</label><input id="rv-lab" data-rv="lab" value="'+esc(d.lab)+'" placeholder="Например, Синэво"></div></div>'+
      '<div class="fld" style="margin-top:10px"><label>Профиль</label><div class="seg" role="group" style="overflow-x:auto">'+profList().map(x=>'<button type="button" data-rvpid="'+x.id+'" aria-pressed="'+(x.id===d.pid)+'">'+esc(x.name)+'</button>').join('')+'</div></div>'+
      (d.file?'<div class="row" style="margin-top:10px"><button type="button" class="btn sm" data-viewfile="'+esc(d.file.id)+'">'+ICON.doc.replace('<svg','<svg width="16" height="16" style="stroke:currentColor;fill:none;stroke-width:2"')+'Посмотреть бланк</button></div>':'')+'</section>';
