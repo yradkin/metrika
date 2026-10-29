@@ -661,8 +661,8 @@ async function syncConnect(){
     SY.since=pl.now-1000;SY.on=true;SY.ready=true;SY.state='ok';SY.okAt=Date.now();S.tg=false;mode='shared';lsSet('health-shared','1');setRole(h.role||'editor');
     if(SY.ro){SY.pending={};savePending();}
     render();if(h.joined&&h.owner)toast(PERSONAL?'Приложение привязано к вашему Telegram. Другие его данные не увидят.':'Вы — организатор. Остальные члены семьи смогут присоединиться, а вы подтвердите их в настройках.');
-    syncPush();if(SY.owner)loadBlocked();
-  }catch(e){SY.state='err';}
+    syncPush();if(SY.owner)loadBlocked();SY.lastErr='';
+  }catch(e){SY.state='err';SY.lastErr=(e&&(e.code||e.name||e.message))||'fail';SY.lastMsg=(e&&e.message)||'';}
   updSync();}
 function loadBlocked(){api('blocked').then(r=>{SY.blocked=r.blocked||[];SY.requests=r.requests||SY.requests;updSync();refreshShareUI();}).catch(()=>{});}
 function refreshHello(){if(!TGA||!SYNC_URL)return;if(!SY.ready&&SY.state!=='pending'){return;}
@@ -932,6 +932,11 @@ function exportPDF(btn){const p=curP();const html=buildReport(p);
   toast('PDF будет доступен после подключения сервера.');}
 
 /* ---------- Настройки, доступ, защита ---------- */
+function diagCard(){if(!(TGA&&SYNC_URL)||SY.ready||SYNC_URL.indexOf('%%')===0)return '';
+  const e=SY.lastErr||'';const why=e==='auth'?'Сервер не узнал подпись Telegram. Проверьте свойство BOT_TOKEN в Apps Script: это должен быть токен именно этого бота, без пробелов. После исправления развёртывание менять не нужно.':
+    (e==='TypeError'||e==='SyntaxError')?'Сервер не отвечает как надо. Проверьте развёртывание: «Веб-приложение», выполнять от имени «Я», доступ «Все». Если меняли код — нужна новая версия развёртывания.':
+    e?'Ошибка сервера: '+e+(SY.lastMsg&&SY.lastMsg!==e?' ('+SY.lastMsg+')':''):'Подключаюсь к серверу…';
+  return '<section class="card"><div class="h"><h2>Подключение</h2><span class="pill '+(e?'p-crit':'p-warn')+'">'+(e?'нет связи':'ждём')+'</span></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">'+esc(why)+'</p><button type="button" class="btn sm" data-act="reconnect">Повторить</button></section>';}
 function shareCard(){if(!(TGA&&SYNC_URL)||!SY.ready||!SY.owner)return '';
   if(PERSONAL&&!SY.requests.length&&!SY.members.some(m=>!m.owner))return '<section class="card" id="shareCard"><div class="h"><h2>Синхронизация</h2><span class="pill p-good">личное</span></div><p class="small" id="syncStatus" style="margin:0 0 8px;color:var(--txt-2)">'+esc(syncText())+'</p><p class="small" style="margin:0;color:var(--txt-3)">Данные привязаны к вашему Telegram и видны на всех ваших устройствах. Другим людям приложение закрыто.</p></section>';
   let h='<section class="card" id="shareCard"><div class="h"><h2>Доступ</h2><span class="pill p-good">синхронизация</span></div><p class="small" id="syncStatus" style="margin:0 0 10px;color:var(--txt-2)">'+esc(syncText())+'</p>';
@@ -944,7 +949,7 @@ function refreshShareUI(){const el=$('#shareCard');if(el)el.outerHTML=shareCard(
 function protectCard(){if(!(SY.ready&&SY.owner))return '';return '<section class="card"><div class="h"><h2>Защита данных</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Все прошлые версии и удалённое хранятся. Каждую ночь делается резервная копия.</p><div class="row"><button type="button" class="btn sm" data-act="changelog">Журнал изменений</button><button type="button" class="btn sm" data-act="trash">Корзина</button><button type="button" class="btn sm" data-act="backups">Резервные копии</button></div></section>';}
 function openSettings(){refreshHello();
   openSheet(top('Настройки')+'<div class="stack">'+(profList().length&&((SY.ready&&SY.owner)||!TGA)?'<button type="button" class="btn primary block big-cta" data-act="pdf">'+ICON.dl+'Отчёт для врача (PDF) — '+esc(curP().name)+'</button>':'')+
-   shareCard()+protectCard()+
+   diagCard()+shareCard()+protectCard()+
    '<section class="card"><div class="h"><h2>Распознавание бланков</h2></div><p class="small" style="margin:0;color:var(--txt-2)">'+(SY.ai?'Подключена нейросеть Gemini — распознаёт точнее.':'Работает встроенное распознавание текста Google Диска. Для большей точности можно подключить ключ Gemini в настройках скрипта (GEMINI_KEY).')+'</p></section>'+
    '<section class="card"><div class="h"><h2>Оформление</h2></div><div class="seg" role="group">'+[['auto','Как в системе'],['light','Светлая'],['dark','Тёмная']].map(([k,l])=>'<button type="button" data-theme-set="'+k+'" aria-pressed="'+((localTheme()||'auto')===k)+'">'+l+'</button>').join('')+'</div></section>'+
    '<p class="note" style="margin:0">Приложение не ставит диагнозов и не заменяет врача. Нормы ориентировочные.</p></div>','settings');}
@@ -997,6 +1002,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
     else if(a==='changelog')openLog();
     else if(a==='trash')openTrash();
     else if(a==='backups')openBackups();
+    else if(a==='reconnect'){SY.lastErr='';toast('Подключаюсь…');syncConnect().then(()=>{if(SY.ready){closeSheet();toast('Сервер подключён.');}else openSettings();});}
     else if(a==='backupnow'){api('backup_now').then(()=>{toast('Копия сохранена.');openBackups();}).catch(()=>toast('Не получилось.'));}
     return;}
 });
