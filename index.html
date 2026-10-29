@@ -494,7 +494,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='1.4';
+const APP_VER='1.5';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -736,6 +736,19 @@ function confirmBox(o){const el=document.createElement('div');el.className='moda
   document.body.appendChild(el);const inp=el.querySelector('#mcode');if(inp)setTimeout(()=>inp.focus(),50);
   el.addEventListener('click',e=>{e.stopPropagation();const b=e.target.closest('[data-m]');if(e.target===el||(b&&b.dataset.m==='no')){el.remove();return;}
     if(b&&b.dataset.m==='ok'){if(o.protect&&(inp.value||'').trim().toLowerCase()!=='удалить'){inp.classList.add('bad');haptic();return;}el.remove();o.onOk();}});}
+/* окно с несколькими вариантами: [{label,cls,fn}] */
+function choiceBox(o){const el=document.createElement('div');el.className='modal';
+  el.innerHTML='<div class="modal-in" role="dialog" aria-modal="true"><h3>'+esc(o.title)+'</h3><p>'+o.text+'</p><div class="stack" style="gap:8px;margin-top:14px">'+o.buttons.map((b,i)=>'<button type="button" class="btn block '+(b.cls||'')+'" data-ch="'+i+'">'+esc(b.label)+'</button>').join('')+'</div></div>';
+  document.body.appendChild(el);haptic();
+  el.addEventListener('click',e=>{e.stopPropagation();const b=e.target.closest('[data-ch]');if(e.target===el){el.remove();return;}if(!b)return;el.remove();const fn=o.buttons[+b.dataset.ch].fn;if(fn)fn();});}
+async function fileHash(file){try{const buf=await file.arrayBuffer();if(window.crypto&&crypto.subtle){const h=await crypto.subtle.digest('SHA-256',buf);return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('');}
+  const a=new Uint8Array(buf);let h1=2166136261>>>0,h2=0;for(let i=0;i<a.length;i++){h1=Math.imul(h1^a[i],16777619)>>>0;h2=(h2*31+a[i])>>>0;}return 'f'+h1.toString(16)+h2.toString(16)+a.length;}catch(e){return '';}}
+/* похожий анализ: тот же профиль и дата, совпадает больше половины значений */
+function findSimilar(pid,date,items,skipId){let best=null;
+  Object.values(st.tests).forEach(t=>{if(t.pid!==pid||t.id===skipId||t.date!==date)return;const ex={};(t.items||[]).forEach(it=>{ex[itemKey(it)]=String(it.value);});
+    const m=items.filter(it=>ex[itemKey(it)]!=null&&ex[itemKey(it)]===String(it.value)).length;
+    if(m>=Math.max(3,Math.ceil(items.length*0.5))||(m>=1&&items.length<=2&&m===items.length)){if(!best||m>best.m)best={t,m};}});
+  return best;}
 let lbEl=null;function closeLb(){if(!lbEl)return false;lbEl.remove();lbEl=null;return true;}
 function showImage(src){closeLb();lbEl=document.createElement('div');lbEl.className='lb';lbEl.innerHTML='<div class="lb-top"><button type="button" class="iconbtn" data-lbx aria-label="Закрыть">'+ICON.x+'</button><span class="cnt">Бланк</span><span style="width:40px"></span></div><div class="lb-img"><img alt="" src="'+src+'"></div>';
   lbEl.addEventListener('click',e=>{if(e.target.closest('[data-lbx]')||e.target.classList.contains('lb-img'))closeLb();});document.body.appendChild(lbEl);}
@@ -828,8 +841,12 @@ async function pdfPages(file){const lib=await loadPdfJs();const doc=await lib.ge
 function attachFile(upId,file){if(!file)return;if(draft&&draft.upId===upId){draft.file=file;}
   const t=Object.values(st.tests).find(t=>t.upId===upId);if(t){t.file=file;delete t.upId;persist('a',t.id);}}
 const readAsDataURL=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});
-async function handleBlank(file){const p=curP();
+async function handleBlank(file,force){const p=curP();
   if(!SY.ready){toast('Распознавание доступно в Telegram после подключения сервера.');return;}
+  const hash=await fileHash(file);
+  if(!force&&hash){const dup=Object.values(st.tests).find(t=>t.fileHash===hash);
+    if(dup){const n=(dup.items||[]).length;closeSheet();choiceBox({title:'Этот бланк уже загружен',text:'Анализ от <b>'+fmtD(dup.date)+'</b>'+(dup.lab?' · '+esc(dup.lab):'')+' — '+n+' '+plural(n,'показатель','показателя','показателей')+'. Загружен '+fmtAgo(dup.created)+'.',
+      buttons:[{label:'Открыть загруженный',cls:'primary',fn:()=>openTest(dup.id)},{label:'Загрузить ещё раз',fn:()=>handleBlank(file,true)},{label:'Отмена',cls:'ghost'}]});return;}}
   openSheet(top('Распознаю бланк')+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div><p class="small" style="margin:8px 0 0;color:var(--txt-2)"><span id="rcStage">Готовлю фото…</span> <b id="rcSec"></b></p><p class="note" style="margin:6px 0 0">Можно не ждать на этом экране — но не закрывайте приложение.</p></section></div>','busy');
   const t0=Date.now();const tick=setInterval(()=>{const el=$('#rcSec');if(!el){clearInterval(tick);return;}el.textContent=Math.round((Date.now()-t0)/1000)+' с';},1000);
   const stage=t=>{const el=$('#rcStage');if(el)el.textContent=t;};
@@ -838,14 +855,14 @@ async function handleBlank(file){const p=curP();
       stage('Читаю PDF…');let res=null;
       try{const pages=await Promise.race([pdfPages(file),new Promise((_,rj)=>setTimeout(()=>rj(new Error('t')),25000))]);const pl=pdfPagesToLines(pages);
         res={items:rowsToItems(pl.lines),date:findDate(pl.head),lab:findLab(pl.head+' '+pages.flat().map(i=>i.s).join(' '))};}catch(e){res=null;}
-      if(res&&res.items.length>=3){const upId=uid();res.upId=upId;res.mode='pdf';res.sec=Math.round((Date.now()-t0)/1000);
+      if(res&&res.items.length>=3){const upId=uid();res.upId=upId;res.mode='pdf';res.fileHash=hash;res.sec=Math.round((Date.now()-t0)/1000);
         api('file_put',{id:upId,data,name:'Бланк '+(p.name||'')+' '+(res.date||ymd(new Date()))}).then(r=>attachFile(upId,r.file)).catch(()=>toast('Бланк не сохранился на Диск — показатели при этом сохранятся.'));
         clearInterval(tick);openReview(res);return;}}
     else{data=await shrinkImg(file,1600,.8);mime='image/jpeg';}
     stage(SY.ai?'Отправляю и распознаю нейросетью…':'Отправляю и читаю текст…');
     const id=uid();const r=await api('recognize',{id,data,name:'Бланк '+(p.name||'')+' '+ymd(new Date())});
     let res;if(r.mode==='ai'&&r.ai)res=fromAI(r.ai);else if(r.mode==='ocr')res=parseOCR(r.text||'');else res={items:[],date:'',lab:''};
-    res.file=r.file;res.mode=r.mode;res.raw=r.mode==='ocr'?(r.text||''):'';res.sec=Math.round((Date.now()-t0)/1000);res.aiError=r.aiError||'';
+    res.file=r.file;res.fileHash=hash;res.mode=r.mode;res.raw=r.mode==='ocr'?(r.text||''):'';res.sec=Math.round((Date.now()-t0)/1000);res.aiError=r.aiError||'';
     clearInterval(tick);openReview(res);
     if(r.mode==='none')toast('Не удалось прочитать текст. Бланк сохранён — введите показатели вручную.');
     else if(!res.items.length)toast('Показатели не нашлись. Проверьте фото или введите вручную.');
@@ -962,7 +979,7 @@ function parseOCRold(text){
   const labs=['Синэво','Synevo','Инвитро','Invitro','Хеликс','Helix','ЛОДЭ','Lode','Синлаб','Synlab','Гемотест','CMD','Кдл','KDL','Медэкспресс','Нордин','Мой доктор'];
   const lab=labs.find(l=>new RegExp(l,'i').test(text))||'';
   return {items,date,lab};}
-function openReview(res){const p=curP();draft={kind:'review',date:res.date||ymd(today()),lab:res.lab||'',note:'',file:res.file||null,items:res.items||[],raw:res.raw||'',mode:res.mode||'manual',sec:res.sec||0,aiError:res.aiError||'',upId:res.upId||'',pid:p.id};renderReview();}
+function openReview(res){const p=curP();draft={kind:'review',date:res.date||ymd(today()),lab:res.lab||'',note:'',file:res.file||null,items:res.items||[],raw:res.raw||'',mode:res.mode||'manual',sec:res.sec||0,aiError:res.aiError||'',upId:res.upId||'',fileHash:res.fileHash||'',pid:p.id};renderReview();}
 function renderReview(){const d=draft;const p=st.profiles[d.pid]||curP();
   const ok=d.items.filter(x=>x.on).length;
   let h=top(d.edit?'Изменить анализ':'Проверьте анализ')+'<div class="stack">';
@@ -982,11 +999,15 @@ function renderReview(){const d=draft;const p=st.profiles[d.pid]||curP();
   h+='<div class="fld"><label for="rv-note">Заметка</label><textarea id="rv-note" data-rv="note" placeholder="Натощак, после болезни, принимаю препараты…">'+esc(d.note||'')+'</textarea></div>';
   h+='<button type="button" class="btn primary block big-cta" data-act="rvsave">Сохранить анализ</button>'+(d.edit?'<button type="button" class="btn danger block" data-act="deltest">Удалить анализ</button>':'')+'</div>';
   const sc=sheet.hidden?0:sheet.scrollTop;openSheet(h,'review',d.edit||null);sheet.scrollTop=sc;}
-function saveReview(){const d=draft;const items=d.items.filter(x=>x.on&&String(x.name).trim()&&String(x.value).trim()!=='').map(x=>({id:x.id,code:x.code||(x.grp?null:matchCode(x.name,x.unit))||null,grp:x.code?undefined:(x.grp||undefined),name:String(x.name).trim(),value:num(x.value)!=null&&/^\s*-?\d+([.,]\d+)?\s*$/.test(String(x.value).trim())?num(x.value):String(x.value).trim(),unit:String(x.unit||'').trim(),lo:num(x.lo)==null?'':num(x.lo),hi:num(x.hi)==null?'':num(x.hi)}));
+function saveReview(how){const d=draft;if(!d)return;const items=d.items.filter(x=>x.on&&String(x.name).trim()&&String(x.value).trim()!=='').map(x=>({id:x.id,code:x.code||(x.grp?null:matchCode(x.name,x.unit))||null,grp:x.code?undefined:(x.grp||undefined),name:String(x.name).trim(),value:num(x.value)!=null&&/^\s*-?\d+([.,]\d+)?\s*$/.test(String(x.value).trim())?num(x.value):String(x.value).trim(),unit:String(x.unit||'').trim(),lo:num(x.lo)==null?'':num(x.lo),hi:num(x.hi)==null?'':num(x.hi)}));
   if(!items.length){toast('Нет ни одного показателя со значением.');return;}
-  const id=d.edit||uid();const old=st.tests[id]||{};
-  st.tests[id]={id,pid:d.pid,date:d.date||ymd(today()),lab:String(d.lab||'').trim(),note:d.note||'',file:d.file||null,upId:d.file?undefined:(d.upId||undefined),items,created:old.created||Date.now(),by:SY.me?SY.me.name:''};
-  persist('a',id);setCur(d.pid);draft=null;closeSheet();tab='home';render();haptic('ok');toast('Анализ сохранён: '+items.length+' '+plural(items.length,'показатель','показателя','показателей')+'.');}
+  const date=d.date||ymd(today());
+  if(!d.edit&&!how){const sim=findSimilar(d.pid,date,items);
+    if(sim){choiceBox({title:'Похоже, этот анализ уже есть',text:'Анализ от <b>'+fmtD(sim.t.date)+'</b>'+(sim.t.lab?' · '+esc(sim.t.lab):'')+': совпадают '+sim.m+' из '+items.length+' значений.',
+      buttons:[{label:'Заменить старый',cls:'primary',fn:()=>saveReview('replace:'+sim.t.id)},{label:'Сохранить как отдельный',fn:()=>saveReview('new')},{label:'Отмена',cls:'ghost'}]});return;}}
+  const id=how&&how.indexOf('replace:')===0?how.slice(8):(d.edit||uid());const old=st.tests[id]||{};
+  st.tests[id]={id,pid:d.pid,date:d.date||ymd(today()),lab:String(d.lab||'').trim(),note:d.note||'',file:d.file||(old.file&&!d.upId?old.file:null)||null,upId:d.file?undefined:(d.upId||undefined),fileHash:d.fileHash||old.fileHash||undefined,items,created:old.created||Date.now(),by:SY.me?SY.me.name:''};
+  persist('a',id);setCur(d.pid);draft=null;closeSheet();tab='home';render();haptic('ok');toast((how&&how.indexOf('replace:')===0?'Анализ заменён: ':'Анализ сохранён: ')+''+items.length+' '+plural(items.length,'показатель','показателя','показателей')+'.');}
 function openTest(id){const t=st.tests[id];if(!t)return;const p=st.profiles[t.pid]||curP();
   let h=top(fmtD(t.date),SY.ro?'':'<button type="button" class="iconbtn" data-edittest="'+id+'" aria-label="Изменить"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>')+'<div class="stack"><div class="small muted">'+esc(p?p.name:'')+(t.lab?' · '+esc(t.lab):'')+'</div>';
   if(t.file)h+='<div class="row"><button type="button" class="btn sm" data-viewfile="'+esc(t.file.id)+'">'+ICON.doc.replace('<svg','<svg width="16" height="16" style="stroke:currentColor;fill:none;stroke-width:2"')+'Бланк</button></div>';
