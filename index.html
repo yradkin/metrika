@@ -494,7 +494,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='1.6';
+const APP_VER='1.7';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -570,7 +570,7 @@ const sameUnit=(a,b)=>!a||!b||a.replace(/\s/g,'').toLowerCase()===b.replace(/\s/
 const COLORS=['#1f8a85','#3d6fd6','#b04f8f','#d8823a','#6a55c9','#2f9a5c','#c24646','#7a8794'];
 
 /* ---------- Состояние ---------- */
-let st={cfg:{},profiles:{},tests:{}};
+let st={cfg:{},profiles:{},tests:{},docs:{}};let sub='tests',docKind='';
 let tab='home',sheetKind=null,sheetId=null,mode='init',draft=null;
 const today=()=>{const d=new Date();d.setHours(0,0,0,0);return d;};
 const pad=n=>String(n).padStart(2,'0');
@@ -608,16 +608,18 @@ function indicatorsOf(pid){const map={};
 const S={db:null,tg:false,timers:{},pending:{}};
 const LS='health-v1';
 function saveLocal(){try{localStorage.setItem(LS,JSON.stringify(st));}catch(e){}}
-function normalize(j){const o={cfg:Object.assign({},j.cfg||{}),profiles:{},tests:{}};
+function normalize(j){const o={cfg:Object.assign({},j.cfg||{}),profiles:{},tests:{},docs:{}};
+  Object.values(j.docs||{}).forEach(d=>{if(d&&d.id){d.files=Array.isArray(d.files)?d.files:[];o.docs[d.id]=d;}});
   Object.values(j.profiles||{}).forEach(p=>{if(p&&p.id){p.remind=p.remind||{};o.profiles[p.id]=p;}});
   Object.values(j.tests||{}).forEach(t=>{if(t&&t.id){t.items=Array.isArray(t.items)?t.items:[];o.tests[t.id]=t;}});return o;}
 function loadLocal(){try{const j=JSON.parse(localStorage.getItem(LS)||'null');if(j)st=normalize(j);}catch(e){}}
 function docKey(kind,id){return kind==='cfg'?'cfg':kind+'_'+id;}
-function bodyOf(k){if(k==='cfg')return {cfg:st.cfg};const id=k.slice(2);if(k[0]==='p'){const p=st.profiles[id];return p?{p}:null;}const t=st.tests[id];return t?{a:t}:null;}
+function bodyOf(k){if(k==='cfg')return {cfg:st.cfg};const id=k.slice(2);if(k[0]==='p'){const p=st.profiles[id];return p?{p}:null;}if(k[0]==='d'){const d=st.docs[id];return d?{d}:null;}const t=st.tests[id];return t?{a:t}:null;}
 function setBody(k,b){if(k==='cfg'){if(b&&b.cfg)st.cfg=Object.assign({},st.cfg,b.cfg);return;}const id=k.slice(2);
   if(k[0]==='p'){if(b&&b.p){b.p.remind=b.p.remind||{};st.profiles[id]=b.p;}else delete st.profiles[id];}
+  else if(k[0]==='d'){if(b&&b.d){b.d.files=Array.isArray(b.d.files)?b.d.files:[];st.docs[id]=b.d;}else delete st.docs[id];}
   else{if(b&&b.a){b.a.items=Array.isArray(b.a.items)?b.a.items:[];st.tests[id]=b.a;}else delete st.tests[id];}}
-function applyDocs(docs,full){if(full){st.profiles={};st.tests={};}Object.keys(docs).forEach(k=>setBody(k,docs[k]));saveLocal();}
+function applyDocs(docs,full){if(full){st.profiles={};st.tests={};st.docs={};}Object.keys(docs).forEach(k=>setBody(k,docs[k]));saveLocal();}
 function persist(kind,id){const key=docKey(kind,id);saveLocal();clearTimeout(S.timers[key]);S.timers[key]=setTimeout(()=>flush(key),500);}
 async function flush(key){
   if(SY.on){if(SY.ro)return;queueKey(key);return;}
@@ -625,7 +627,7 @@ async function flush(key){
   try{if(S.db){const ref=S.db.doc('h/'+key);if(body)await ref.set(body);else await ref.delete();}
     else if(S.tg){await new Promise((res,rej)=>{if(!body){TGA.CloudStorage.removeItem(key,e=>e?rej(e):res());return;}const s=JSON.stringify(body);if(s.length>4090){toast('Анализ слишком большой для хранения в Telegram — подключите общий доступ.');}TGA.CloudStorage.setItem(key,s.slice(0,4090),e=>e?rej(e):res());});}}
   catch(e){}}
-function pushAllKeys(){return ['cfg'].concat(Object.keys(st.profiles).map(i=>'p_'+i),Object.keys(st.tests).map(i=>'a_'+i));}
+function pushAllKeys(){return ['cfg'].concat(Object.keys(st.profiles).map(i=>'p_'+i),Object.keys(st.tests).map(i=>'a_'+i),Object.keys(st.docs||{}).map(i=>'d_'+i));}
 
 const SY={on:false,ready:false,state:'',me:null,owner:false,role:'',ro:false,members:[],requests:[],blocked:[],ai:false,pendingAccess:false,since:0,pending:{},seq:0,busy:false,pulling:false,okAt:0,pt:0,srv:{},meta:{},tick:0};
 const lsGet=k=>{try{return localStorage.getItem(k);}catch(e){return null;}};
@@ -656,6 +658,7 @@ async function syncPull(){
 async function resyncAll(){try{const r=await api('pull',{since:0});const docs={};r.docs.forEach(d=>{if(d.body)docs[d.key]=d.body;});applyDocs(docs,true);noteMeta(r.docs);SY.since=r.now-1000;refreshAfterSync();}catch(e){}}
 function refreshAfterSync(){render();if(sheet.hidden)return;const a=document.activeElement;if(a&&sheet.contains(a)&&/INPUT|TEXTAREA|SELECT/.test(a.tagName))return;
   if(sheetKind==='test'&&sheetId){if(!st.tests[sheetId]){closeSheet();return;}const sc=sheet.scrollTop;openTest(sheetId);sheet.scrollTop=sc;}
+  else if(sheetKind==='doc'&&sheetId){if(!st.docs[sheetId]){closeSheet();return;}const sc=sheet.scrollTop;openDoc(sheetId);sheet.scrollTop=sc;}
   else if(sheetKind==='ind'&&sheetId){const sc=sheet.scrollTop;openIndicator(sheetId);sheet.scrollTop=sc;}}
 function setRole(r){SY.role=r||'';SY.ro=SY.ready&&SY.role==='viewer';document.body.classList.toggle('ro',SY.ro);}
 async function syncConnect(){
@@ -738,7 +741,7 @@ function confirmBox(o){const el=document.createElement('div');el.className='moda
     if(b&&b.dataset.m==='ok'){if(o.protect&&(inp.value||'').trim().toLowerCase()!=='удалить'){inp.classList.add('bad');haptic();return;}el.remove();o.onOk();}});}
 /* импорт истории из файла metrika-import */
 async function importFile(file){let j;try{j=JSON.parse(await file.text());}catch(e){toast('Не получилось прочитать файл.');return;}
-  if(!j||j.format!=='metrika-import'||!Array.isArray(j.tests)){toast('Это не файл импорта «Метрики».');return;}
+  if(!j||j.format!=='metrika-import'||!Array.isArray(j.tests||[])){toast('Это не файл импорта «Метрики».');return;}j.tests=j.tests||[];
   let p=curP();if(!p){p={id:uid(),name:(j.profile&&j.profile.name)||'Я',sex:'',birth:'',color:COLORS[0],remind:{},created:Date.now()};st.profiles[p.id]=p;setCur(p.id);}
   if(j.profile){let ch=false;if(!p.sex&&j.profile.sex){p.sex=j.profile.sex;ch=true;}if(!p.birth&&j.profile.birth){p.birth=String(j.profile.birth).slice(0,4);ch=true;}if(ch)persist('p',p.id);}
   let added=0,skipped=0,rows=0;
@@ -746,7 +749,14 @@ async function importFile(file){let j;try{j=JSON.parse(await file.text());}catch
     const items=t.items.map(x=>({id:uid(),code:x.code||null,grp:x.code?undefined:(x.grp||undefined),name:String(x.name||''),value:x.value,unit:x.unit||'',lo:x.lo==null?'':x.lo,hi:x.hi==null?'':x.hi,ref:x.ref||''})).filter(x=>x.name&&x.value!==''&&x.value!=null);
     if(!items.length||findSimilar(p.id,t.date,items)){skipped++;return;}
     const id=uid();st.tests[id]={id,pid:p.id,date:t.date,lab:String(t.lab||''),note:t.source?'Импорт: '+t.source:'',file:null,items,created:Date.now(),by:SY.me?SY.me.name:'',source:t.source||''};persist('a',id);added++;rows+=items.length;});
-  render();haptic('ok');choiceBox({title:'Импорт завершён',text:'Добавлено анализов: <b>'+added+'</b> ('+rows+' '+plural(rows,'значение','значения','значений')+').'+(skipped?'<br>Пропущено как повторы: '+skipped+'.':''),buttons:[{label:'Отлично',cls:'primary',fn:()=>{closeSheet();tab='ind';render();}}]});}
+  let dAdded=0,dSkip=0,linked=0;
+  if(Array.isArray(j.docs)&&j.docs.length){let map={};const nn=x=>String(x||'').normalize('NFC').toLowerCase().trim();
+    if(SY.ready&&j.docs.some(d=>d.source)){toast('Связываю документы с файлами на Диске…');try{const r=await api('med_list');(r.files||[]).forEach(f=>{map[nn(f.name)]=f;});}catch(e){}}
+    j.docs.forEach(x=>{if(!x||!/^\d{4}-\d{2}-\d{2}$/.test(x.date||'')){dSkip++;return;}const title=String(x.title||DK[x.kind]||'Документ');
+      if(Object.values(st.docs).some(d=>d.pid===p.id&&d.date===x.date&&d.title===title)){dSkip++;return;}
+      const files=[].concat(x.source||[]).map(n=>map[nn(n)]).filter(Boolean).map(f=>({id:f.id,name:f.name,mime:f.mime,med:true}));linked+=files.length;
+      const id=uid();st.docs[id]={id,pid:p.id,date:x.date,kind:DK[x.kind]?x.kind:'other',title,spec:x.spec||'',doctor:x.doctor||'',clinic:x.clinic||'',conclusion:x.conclusion||'',recs:x.recs||'',text:x.text||'',note:x.note||'',files,source:[].concat(x.source||[]).join(', '),created:Date.now()};persist('d',id);dAdded++;});}
+  render();haptic('ok');choiceBox({title:'Импорт завершён',text:'Добавлено анализов: <b>'+added+'</b> ('+rows+' '+plural(rows,'значение','значения','значений')+').'+(skipped?'<br>Пропущено как повторы: '+skipped+'.':'')+(j.docs?'<br>Обследований: <b>'+dAdded+'</b>'+(linked?', с файлами с Диска: '+linked:'')+(dSkip?', повторов: '+dSkip:'')+'.':''),buttons:[{label:'Отлично',cls:'primary',fn:()=>{closeSheet();tab='ind';render();}}]});}
 /* окно с несколькими вариантами: [{label,cls,fn}] */
 function choiceBox(o){const el=document.createElement('div');el.className='modal';
   el.innerHTML='<div class="modal-in" role="dialog" aria-modal="true"><h3>'+esc(o.title)+'</h3><p>'+o.text+'</p><div class="stack" style="gap:8px;margin-top:14px">'+o.buttons.map((b,i)=>'<button type="button" class="btn block '+(b.cls||'')+'" data-ch="'+i+'">'+esc(b.label)+'</button>').join('')+'</div></div>';
@@ -795,7 +805,9 @@ function homeHTML(){const p=curP();const ts=testsOf(p.id);const inds=indicatorsO
   else h+='<section class="card"><div class="empty">Загрузите первый анализ — фото или PDF бланка из лаборатории. Можно и вручную.</div></section>';
   return h;}
 function itemRow(it,p){const s=statusOf(it,p),n=normFor(it,p);return '<div class="item" data-ind="'+esc(itemKey(it))+'"><span class="dot '+(s==='ok'?'ok':s)+'"></span><div style="min-width:0"><div class="n">'+esc(it.code&&CAT[it.code]?CAT[it.code].name:it.name)+'</div><div class="s">'+(refTxt(n)?'норма '+refTxt(n)+(n.src==='typ'?'*':''):'')+(s&&s!=='ok'?' · '+stLabel[s]:'')+'</div></div><div class="r val '+(s?'st-'+s:'')+'">'+esc(num(it.value)!=null?fmtN(num(it.value)):it.value)+' <span class="ref">'+esc(it.unit||'')+'</span></div></div>';}
-function testsHTML(){const p=curP();const ts=testsOf(p.id);
+function subSeg(){const nd=docsOf(curP().id).length;return '<div class="seg" role="group" style="margin-bottom:-2px"><button type="button" data-sub="tests" aria-pressed="'+(sub==='tests')+'">Анализы</button><button type="button" data-sub="docs" aria-pressed="'+(sub==='docs')+'">Обследования'+(nd?' · '+nd:'')+'</button></div>';}
+function testsHTML(){if(sub==='docs')return subSeg()+docsHTML();return subSeg()+testsHTML0();}
+function testsHTML0(){const p=curP();const ts=testsOf(p.id);
   let h='<div class="row" style="justify-content:space-between">'+profChip()+(SY.ro?'':'<button type="button" class="btn primary sm" data-act="addtest">'+ICON.plus.replace('<svg','<svg width="16" height="16" style="stroke:currentColor;fill:none;stroke-width:2.4"')+'Анализ</button>')+'</div>';
   if(!ts.length)return h+'<section class="card"><div class="empty">Пока пусто. Нажмите «Анализ», чтобы загрузить бланк.</div></section>';
   let yr='';ts.forEach(t=>{const y=(t.date||'').slice(0,4)||'Без даты';if(y!==yr){yr=y;h+='<div class="yr">'+esc(y)+'</div>';}
@@ -1029,6 +1041,49 @@ function saveReview(how){const d=draft;if(!d)return;const items=d.items.filter(x
   const id=how&&how.indexOf('replace:')===0?how.slice(8):(d.edit||uid());const old=st.tests[id]||{};
   st.tests[id]={id,pid:d.pid,date:d.date||ymd(today()),lab:String(d.lab||'').trim(),note:d.note||'',file:d.file||(old.file&&!d.upId?old.file:null)||null,upId:d.file?undefined:(d.upId||undefined),fileHash:d.fileHash||old.fileHash||undefined,items,created:old.created||Date.now(),by:SY.me?SY.me.name:''};
   persist('a',id);setCur(d.pid);draft=null;closeSheet();tab='home';render();haptic('ok');toast((how&&how.indexOf('replace:')===0?'Анализ заменён: ':'Анализ сохранён: ')+''+items.length+' '+plural(items.length,'показатель','показателя','показателей')+'.');}
+/* ---------- Обследования: приёмы врачей, УЗИ, МРТ, выписки ---------- */
+const DOC_KINDS=[['visit','Приём врача'],['us','УЗИ'],['mri','МРТ'],['ct','КТ'],['xray','Рентген'],['ecg','ЭКГ'],['endo','Эндоскопия'],['discharge','Выписка'],['cert','Справка'],['other','Другое']];
+const DK=Object.fromEntries(DOC_KINDS);
+const docsOf=pid=>Object.values(st.docs||{}).filter(d=>d.pid===pid).sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.created||0)-(a.created||0));
+const clip=(t,n)=>{t=String(t||'').replace(/\s+/g,' ').trim();return t.length>n?t.slice(0,n-1)+'…':t;};
+function docsHTML(){const p=curP();const all=docsOf(p.id);const kinds=DOC_KINDS.filter(([k])=>all.some(d=>(d.kind||'other')===k));
+  let h='<div class="row" style="justify-content:space-between">'+(SY.ro?'<span></span>':'<button type="button" class="btn primary sm" data-act="adddoc">'+ICON.plus.replace('<svg','<svg width="16" height="16" style="stroke:currentColor;fill:none;stroke-width:2.4"')+'Документ</button>')+'<span class="small muted">'+all.length+' '+plural(all.length,'документ','документа','документов')+'</span></div>';
+  if(kinds.length>1)h+='<div class="seg" role="group"><button type="button" data-dk="" aria-pressed="'+(!docKind)+'">Все</button>'+kinds.map(([k,l])=>'<button type="button" data-dk="'+k+'" aria-pressed="'+(docKind===k)+'">'+l+'</button>').join('')+'</div>';
+  const list=all.filter(d=>!docKind||(d.kind||'other')===docKind);
+  if(!list.length)return h+'<section class="card"><div class="empty">Здесь будут заключения врачей, УЗИ, МРТ, ЭКГ и выписки. Нажмите «Документ», чтобы добавить фото или PDF.</div></section>';
+  let yr='';list.forEach(d=>{const y=(d.date||'').slice(0,4)||'Без даты';if(y!==yr){yr=y;h+='<div class="yr">'+esc(y)+'</div>';}
+    h+='<section class="card" data-doc="'+d.id+'" style="cursor:pointer"><div class="row" style="justify-content:space-between;flex-wrap:nowrap;align-items:flex-start;gap:10px"><div style="min-width:0"><div style="font-weight:700;font-size:16px;line-height:1.25">'+esc(d.title||DK[d.kind]||'Документ')+'</div><div class="small muted">'+[fmtD(d.date),d.spec,d.clinic].filter(Boolean).map(esc).join(' · ')+'</div>'+(d.conclusion?'<div class="small" style="margin-top:6px;color:var(--txt-2)">'+esc(clip(d.conclusion,140))+'</div>':'')+'</div><span class="pill p-acc" style="flex:none">'+esc(DK[d.kind]||'Другое')+'</span></div></section>';});
+  return h;}
+function openDoc(id){const d=st.docs[id];if(!d)return;
+  let h=top(DK[d.kind]||'Документ',SY.ro?'':'<button type="button" class="iconbtn" data-editdoc="'+id+'" aria-label="Изменить"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>')+'<div class="stack">';
+  h+='<section class="hero" style="padding:18px 20px"><div class="names" style="font-size:28px">'+esc(d.title||DK[d.kind]||'Документ')+'</div><div class="when">'+[fmtD(d.date),d.spec,d.doctor,d.clinic].filter(Boolean).map(esc).join(' · ')+'</div></section>';
+  if(d.conclusion)h+='<section class="card"><div class="h"><h2>Заключение</h2></div><div style="white-space:pre-wrap;line-height:1.45">'+esc(d.conclusion)+'</div></section>';
+  if(d.recs)h+='<section class="card"><div class="h"><h2>Рекомендации</h2></div><div style="white-space:pre-wrap;line-height:1.45">'+esc(d.recs)+'</div></section>';
+  if(d.text)h+='<section class="card"><details><summary class="small" style="cursor:pointer;font-weight:600">Полный текст</summary><div class="small" style="white-space:pre-wrap;margin-top:8px;color:var(--txt-2)">'+esc(d.text)+'</div></details></section>';
+  if(d.note)h+='<section class="card"><div class="small" style="color:var(--txt-2)">'+esc(d.note)+'</div></section>';
+  if((d.files||[]).length)h+='<section class="card"><div class="h"><h2>Файлы</h2></div><div class="row" style="gap:6px">'+d.files.map((f,i)=>'<button type="button" class="btn sm" data-viewfile="'+esc(f.id)+'">'+ICON.doc.replace('<svg','<svg width="16" height="16" style="stroke:currentColor;fill:none;stroke-width:2"')+esc(d.files.length>1?'Файл '+(i+1):'Открыть файл')+'</button>').join('')+'</div></section>';
+  h+='<p class="note" style="margin:0">Текст документа хранится как справка. Решения о лечении принимает врач.</p></div>';
+  openSheet(h,'doc',id);}
+function editDoc(id){const d=id?st.docs[id]:{id:uid(),pid:curP().id,date:ymd(today()),kind:'visit',title:'',spec:'',doctor:'',clinic:'',conclusion:'',recs:'',text:'',note:'',files:[],created:Date.now()};
+  draft={kind:'doc',d:JSON.parse(JSON.stringify(d)),isNew:!id};renderDocForm();}
+function renderDocForm(){const d=draft.d;const f=(k,l,ph,t)=>'<div class="fld"><label>'+l+'</label>'+(t==='ta'?'<textarea data-df="'+k+'" placeholder="'+esc(ph||'')+'">'+esc(d[k]||'')+'</textarea>':'<input data-df="'+k+'" '+(t==='date'?'type="date"':'')+' value="'+esc(d[k]||'')+'" placeholder="'+esc(ph||'')+'" autocomplete="off">')+'</div>';
+  openSheet(top(draft.isNew?'Новый документ':'Документ',draft.isNew?'':'<button type="button" class="iconbtn" data-act="deldoc" aria-label="Удалить">'+ICON.del+'</button>')+'<div class="stack">'+
+   '<label class="drop" style="padding:16px">'+ICON.up+'<b>'+(d.files.length?'Добавить ещё файл':'Фото или PDF документа')+'</b><span class="small muted">'+(d.files.length?'Прикреплено: '+d.files.length:'Распознаю дату, заключение и рекомендации')+'</span><input type="file" accept="image/*,application/pdf" data-docfile></label>'+
+   '<section class="card"><div class="stack" style="gap:12px">'+f('title','Название','Например «УЗИ щитовидной железы»')+
+   '<div class="row" style="gap:10px;flex-wrap:nowrap">'+f('date','Дата','', 'date')+'<div class="fld"><label>Вид</label><select data-df="kind">'+DOC_KINDS.map(([k,l])=>'<option value="'+k+'"'+(d.kind===k?' selected':'')+'>'+l+'</option>').join('')+'</select></div></div>'+
+   f('spec','Специальность врача','Терапевт, невролог…')+f('doctor','Врач','ФИО')+f('clinic','Клиника','')+
+   f('conclusion','Заключение / диагноз','','ta')+f('recs','Рекомендации','','ta')+f('note','Заметка для себя','','ta')+'</div></section>'+
+   '<button type="button" class="btn primary block big-cta" data-act="savedoc">Сохранить</button></div>','docform');}
+async function addDocFile(file){const d=draft&&draft.kind==='doc'?draft.d:null;if(!d)return;if(!SY.ready){toast('Файлы сохраняются после подключения сервера.');return;}
+  if(file.size>9*1024*1024){toast('Файл больше 9 МБ.');return;}
+  toast('Загружаю и распознаю…');let data;const isPdf=/pdf/i.test(file.type)||/\.pdf$/i.test(file.name);
+  try{data=isPdf?await readAsDataURL(file):await shrinkImg(file,2000,.85);}catch(e){toast('Не получилось прочитать файл.');return;}
+  try{const fid=uid();const r=await api('file_put',{id:fid,data,name:'Документ '+(d.title||'')+' '+(d.date||'')});if(!draft||draft.d!==d)return;d.files.push(r.file);
+    const empty=!d.conclusion&&!d.title;
+    if(empty){try{const x=await api('doc_read',{fid:r.file.id});if(x.mode==='ai'&&x.doc){const g=x.doc;['title','spec','doctor','clinic','conclusion','recs','text'].forEach(k=>{if(!d[k]&&g[k])d[k]=String(g[k]);});if(/^\d{4}-\d{2}-\d{2}$/.test(g.date||''))d.date=g.date;if(DK[g.kind])d.kind=g.kind;}else if(x.text&&!d.text)d.text=x.text;}catch(e){}}
+    if(draft&&draft.d===d)renderDocForm();toast(empty?'Файл прикреплён. Проверьте поля.':'Файл прикреплён.');}catch(e){toast('Не получилось загрузить файл.');}}
+function saveDoc(){const d=draft.d;if(!d.title&&!d.conclusion&&!d.files.length){toast('Добавьте название, заключение или файл.');return;}
+  d.title=String(d.title||'').trim()||DK[d.kind]||'Документ';st.docs[d.id]=d;persist('d',d.id);draft=null;closeSheet();tab='tests';sub='docs';render();haptic('ok');toast('Документ сохранён.');}
 function openTest(id){const t=st.tests[id];if(!t)return;const p=st.profiles[t.pid]||curP();
   let h=top(fmtD(t.date),SY.ro?'':'<button type="button" class="iconbtn" data-edittest="'+id+'" aria-label="Изменить"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>')+'<div class="stack"><div class="small muted">'+esc(p?p.name:'')+(t.lab?' · '+esc(t.lab):'')+'</div>';
   if(t.file)h+='<div class="row"><button type="button" class="btn sm" data-viewfile="'+esc(t.file.id)+'">'+ICON.doc.replace('<svg','<svg width="16" height="16" style="stroke:currentColor;fill:none;stroke-width:2"')+'Бланк</button></div>';
@@ -1108,7 +1163,7 @@ function openSettings(){refreshHello();
 const fmtAgo=at=>{if(!at)return '';const d=Date.now()-at;if(d<60e3)return 'только что';if(d<3600e3)return Math.round(d/60e3)+' мин назад';const t=new Date(at);return (ymd(t)===ymd(today())?'сегодня':fmtDs(ymd(t)))+', '+t.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});};
 function loadingSheet(t){openSheet(top(t)+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div></section></div>');}
 async function openLog(){loadingSheet('Журнал изменений');try{const r=await api('log',{limit:200});const it=r.items||[];openSheet(top('Журнал изменений')+'<div class="stack">'+(it.length?'<section class="card"><div class="list">'+it.map(x=>'<div class="li" style="cursor:default"><span class="dot acc"></span><div><div class="t">'+esc(x.title)+'</div><div class="s" style="color:var(--txt-2)">'+esc(x.what)+'</div><div class="s">'+esc(x.by||'—')+' · '+fmtAgo(x.at)+'</div></div><div class="r"></div></div>').join('')+'</div></section>':'<section class="card"><div class="empty">Изменений пока нет.</div></section>')+'</div>');}catch(e){openSheet(top('Журнал изменений')+'<div class="stack"><section class="card"><div class="empty">Не получилось загрузить.</div></section></div>');}}
-async function openTrash(){loadingSheet('Корзина');try{const r=await api('trash');SY.trash=r.items||[];openSheet(top('Корзина')+'<div class="stack">'+(SY.trash.length?'<section class="card"><div class="list">'+SY.trash.map((it,i)=>'<div class="li" style="cursor:default"><span class="dot"></span><div><div class="t">'+esc(it.key[0]==='p'?'Профиль: '+((it.body.p||{}).name||''):'Анализ '+fmtD((it.body.a||{}).date)+((it.body.a||{}).lab?' · '+(it.body.a||{}).lab:''))+'</div><div class="s">удалил(а) '+esc(it.by||'—')+' · '+fmtAgo(it.deletedAt)+'</div></div><div class="r"><button type="button" class="btn sm" data-untrash="'+i+'">Вернуть</button></div></div>').join('')+'</div></section>':'<section class="card"><div class="empty">Корзина пуста.</div></section>')+'</div>');}catch(e){openSheet(top('Корзина')+'<div class="stack"><section class="card"><div class="empty">Не получилось загрузить.</div></section></div>');}}
+async function openTrash(){loadingSheet('Корзина');try{const r=await api('trash');SY.trash=r.items||[];openSheet(top('Корзина')+'<div class="stack">'+(SY.trash.length?'<section class="card"><div class="list">'+SY.trash.map((it,i)=>'<div class="li" style="cursor:default"><span class="dot"></span><div><div class="t">'+esc(it.key[0]==='d'?'Документ: '+((it.body.d||{}).title||'')+' '+fmtD((it.body.d||{}).date):it.key[0]==='p'?'Профиль: '+((it.body.p||{}).name||''):'Анализ '+fmtD((it.body.a||{}).date)+((it.body.a||{}).lab?' · '+(it.body.a||{}).lab:''))+'</div><div class="s">удалил(а) '+esc(it.by||'—')+' · '+fmtAgo(it.deletedAt)+'</div></div><div class="r"><button type="button" class="btn sm" data-untrash="'+i+'">Вернуть</button></div></div>').join('')+'</div></section>':'<section class="card"><div class="empty">Корзина пуста.</div></section>')+'</div>');}catch(e){openSheet(top('Корзина')+'<div class="stack"><section class="card"><div class="empty">Не получилось загрузить.</div></section></div>');}}
 async function openBackups(){loadingSheet('Резервные копии');try{const r=await api('backups');SY.bk=r.items||[];openSheet(top('Резервные копии')+'<div class="stack"><div class="row"><button type="button" class="btn primary sm" data-act="backupnow">Сделать копию сейчас</button></div>'+(SY.bk.length?'<section class="card"><div class="list">'+SY.bk.map((it,i)=>'<div class="li" style="cursor:default"><span class="dot ok"></span><div><div class="t">'+esc(it.name.replace(/^Копия /,'').replace(/\.json$/,''))+'</div></div><div class="r"><button type="button" class="btn sm" data-restoreb="'+i+'">Восстановить</button></div></div>').join('')+'</div></section>':'<section class="card"><div class="empty">Копий пока нет.</div></section>')+'</div>');}catch(e){openSheet(top('Резервные копии')+'<div class="stack"><section class="card"><div class="empty">Не получилось загрузить.</div></section></div>');}}
 
 /* ---------- События ---------- */
@@ -1140,7 +1195,14 @@ document.addEventListener('click',e=>{const t=e.target;let el;
   if((el=t.closest('[data-restoreb]'))){const it=(SY.bk||[])[+el.dataset.restoreb];if(!it)return;confirmBox({title:'Восстановить копию?',text:'Все данные станут как в копии «'+esc(it.name.replace(/\.json$/,''))+'». Текущее состояние перед этим сохранится.',protect:true,ok:'Восстановить',onOk:()=>{api('restore_backup',{id:it.id}).then(()=>{resyncAll();closeSheet();toast('Восстановлено.');}).catch(()=>toast('Не получилось.'));}});return;}
   if((el=t.closest('[data-theme-set]'))){const k=el.dataset.themeSet;try{if(k==='auto')localStorage.removeItem('health-theme');else localStorage.setItem('health-theme',k);}catch(err){}
     if(k==='auto'){if(TGA)document.documentElement.setAttribute('data-theme',TGA.colorScheme==='dark'?'dark':'light');else document.documentElement.removeAttribute('data-theme');}else document.documentElement.setAttribute('data-theme',k);tgColors();sheetIn.querySelectorAll('[data-theme-set]').forEach(b=>b.setAttribute('aria-pressed',String(b===el)));return;}
+  if((el=t.closest('[data-sub]'))){sub=el.dataset.sub;render();return;}
+  if((el=t.closest('[data-dk]'))){docKind=el.dataset.dk;render();return;}
+  if((el=t.closest('[data-doc]'))){openDoc(el.dataset.doc);return;}
+  if((el=t.closest('[data-editdoc]'))){editDoc(el.dataset.editdoc);return;}
   if((el=t.closest('[data-act]'))){const a=el.dataset.act;
+    if(a==='adddoc'){editDoc(null);return;}
+    if(a==='savedoc'){saveDoc();return;}
+    if(a==='deldoc'){const d=draft&&draft.d;if(!d)return;confirmBox({title:'Удалить документ?',text:esc(d.title||'')+' · '+fmtD(d.date)+'. Его можно будет вернуть из корзины.',onOk:()=>{delete st.docs[d.id];persist('d',d.id);draft=null;closeSheet();render();toast('Документ удалён.');}});return;}
     if(a==='addprof')openProfile();
     else if(a==='pickprof')pickProfile();
     else if(a==='addtest')openAdd();
@@ -1160,11 +1222,14 @@ document.addEventListener('click',e=>{const t=e.target;let el;
 });
 document.addEventListener('input',e=>{const t=e.target;
   if(draft&&draft.kind==='prof'&&t.dataset.pf){draft.p[t.dataset.pf]=t.value;return;}
+  if(draft&&draft.kind==='doc'&&t.dataset.df){draft.d[t.dataset.df]=t.value;return;}
   if(draft&&draft.kind==='review'){if(t.dataset.rv){draft[t.dataset.rv]=t.value;return;}if(t.dataset.rf){const row=t.closest('[data-ri]');const it=draft.items[+row.dataset.ri];it[t.dataset.rf]=t.value;if(t.dataset.rf==='name')it.code=matchCode(t.value);return;}}
 });
 document.addEventListener('change',e=>{const t=e.target;
+  if(draft&&draft.kind==='doc'&&t.dataset.df){draft.d[t.dataset.df]=t.value;return;}
   if(t.dataset.blank!==undefined&&t.files&&t.files[0]){const f=t.files[0];t.value='';handleBlank(f);return;}
   if(t.dataset.import!==undefined&&t.files&&t.files[0]){const f=t.files[0];t.value='';importFile(f);return;}
+  if(t.dataset.docfile!==undefined&&t.files&&t.files[0]){const f=t.files[0];t.value='';addDocFile(f);return;}
   if(t.dataset.remind){const p=curP();p.remind=p.remind||{};if(t.value)p.remind[t.dataset.remind]=t.value;else delete p.remind[t.dataset.remind];persist('p',p.id);return;}
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!closeLb())closeSheet();}if(e.key==='Enter'&&e.target.id==='rv-add'){e.preventDefault();sheetIn.querySelector('[data-act="rvadd"]').click();}});
