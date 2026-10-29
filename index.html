@@ -494,7 +494,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='1.5';
+const APP_VER='1.6';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -512,7 +512,7 @@ const CATALOG=[
  ['WBC','Лейкоциты',['лейкоциты','wbc'],'×10⁹/л','blood',[4,9],[4,9],'Клетки иммунитета. Повышаются при инфекциях и воспалении.'],
  ['PLT','Тромбоциты',['тромбоциты','plt'],'×10⁹/л','blood',[150,400],[150,400],'Отвечают за свёртывание крови.'],
  ['ESR','СОЭ',['соэ','скорость оседания эритроцитов','esr'],'мм/ч','blood',[2,15],[2,20],'Неспецифический признак воспаления.'],
- ['NEU','Нейтрофилы, %',['нейтрофилы','сегментоядерные','neu'],'%','blood',[47,72],[47,72],'Основные клетки защиты от бактерий.'],
+ ['NEU','Нейтрофилы, %',['нейтрофилы','нейтрофильные гранулоциты','сегментоядерные','neu','neut'],'%','blood',[47,72],[47,72],'Основные клетки защиты от бактерий.'],
  ['NEU_A','Нейтрофилы, абс.',['нейтрофилы абс','neu#'],'×10⁹/л','blood',[1.8,7.7],[1.8,7.7],'Количество нейтрофилов в литре крови.'],
  ['LYM_A','Лимфоциты, абс.',['лимфоциты абс','lym#'],'×10⁹/л','blood',[1.0,4.8],[1.0,4.8],'Количество лимфоцитов в литре крови.'],
  ['MON_A','Моноциты, абс.',['моноциты абс','mon#'],'×10⁹/л','blood',[0.1,0.9],[0.1,0.9],'Количество моноцитов в литре крови.'],
@@ -565,7 +565,7 @@ const CAT=Object.fromEntries(CATALOG.map(c=>[c[0],{code:c[0],name:c[1],al:c[2],u
 const normName=x=>' '+String(x||'').toLowerCase().replace(/ё/g,'е').replace(/[-–,.;:]+/g,' ').replace(/\s+/g,' ').trim()+' ';
 const LAT=x=>x.replace(/[аеорсухкмтнв]/g,c=>({а:'a',е:'e',о:'o',р:'p',с:'c',у:'y',х:'x',к:'k',м:'m',т:'t',н:'h',в:'b'})[c]);
 const AL=[];CATALOG.forEach(c=>c[2].forEach(a=>AL.push([normName(a).trim(),c[0]])));AL.sort((a,b)=>b[0].length-a[0].length);
-const UNITS=[['×10⁹/л',/тыс\s*\/\s*мкл/i],['×10¹²/л',/млн\s*\/\s*мкл/i],['×10¹²/л',/(?:[x×х*]\s*)?10\s*(?:\^|\*|¹)?\s*(?:12|¹²)\s*\/\s*л/i],['×10⁹/л',/(?:[x×х*]\s*)?10\s*(?:\^|\*)?\s*(?:9|⁹)\s*\/\s*л/i],['мкмоль/л',/мкмоль\s*\/\s*л/i],['ммоль/л',/ммоль\s*\/\s*л/i],['пмоль/л',/пмоль\s*\/\s*л/i],['нмоль/л',/нмоль\s*\/\s*л/i],['мкЕд/мл',/мк\s*(?:ед|ме|u)\s*\/\s*мл/i],['мМЕ/л',/(?:мме|мкме|mu|мед)\s*\/\s*(?:л|мл)/i],['МЕ/мл',/(?:^|[^мк])(?:ме|ед|iu|u)\s*\/\s*мл/i],['Ед/л',/(?:ед|u|е|me)\s*\/\s*л/i],['нг/мл',/(?:нг\s*\/\s*мл|мкг\s*\/\s*л)/i],['пг/мл',/пг\s*\/\s*мл/i],['мг/л',/мг\s*\/\s*л/i],['мг/дл',/мг\s*\/\s*дл/i],['г/л',/(?:^|[^кмн])г\s*\/\s*л/i],['г/дл',/г\s*\/\s*дл/i],['мм/ч',/мм\s*\/\s*ч/i],['фл',/(?:^|\s)фл(?:\s|$)|fl(?:\s|$)/i],['пг',/(?:^|\s)пг(?:\s|$)|pg(?:\s|$)/i],['%',/%/]];
+const UNITS=[['×10⁹/л',/тыс\s*\/\s*мкл|^10\s*\^?\s*9(\s|$)/i],['×10¹²/л',/^10\s*\^?\s*12(\s|$)/i],['×10¹²/л',/млн\s*\/\s*мкл/i],['×10¹²/л',/(?:[x×х*]\s*)?10\s*(?:\^|\*|¹)?\s*(?:12|¹²)\s*\/\s*л/i],['×10⁹/л',/(?:[x×х*]\s*)?10\s*(?:\^|\*)?\s*(?:9|⁹)\s*\/\s*л/i],['мкмоль/л',/мкмоль\s*\/\s*л/i],['ммоль/л',/ммоль\s*\/\s*л/i],['пмоль/л',/пмоль\s*\/\s*л/i],['нмоль/л',/нмоль\s*\/\s*л/i],['мкЕд/мл',/мк\s*(?:ед|ме|u)\s*\/\s*мл/i],['мМЕ/л',/(?:мме|мкме|mu|мед)\s*\/\s*(?:л|мл)/i],['МЕ/мл',/(?:^|[^мк])(?:ме|ед|iu|u)\s*\/\s*мл/i],['Ед/л',/(?:ед|u|е|me)\s*\/\s*л/i],['нг/мл',/(?:нг\s*\/\s*мл|мкг\s*\/\s*л)/i],['пг/мл',/пг\s*\/\s*мл/i],['мг/л',/мг\s*\/\s*л/i],['мг/дл',/мг\s*\/\s*дл/i],['г/л',/(?:^|[^кмн])г\s*\/\s*л/i],['г/дл',/г\s*\/\s*дл/i],['мм/ч',/мм\s*\/\s*ч/i],['фл',/(?:^|\s)фл(?:\s|$)|fl(?:\s|$)/i],['пг',/(?:^|\s)пг(?:\s|$)|pg(?:\s|$)/i],['%',/%/]];
 const sameUnit=(a,b)=>!a||!b||a.replace(/\s/g,'').toLowerCase()===b.replace(/\s/g,'').toLowerCase()||(/нг\/мл|мкг\/л/i.test(a)&&/нг\/мл|мкг\/л/i.test(b))||(/мме\/л|мкме\/мл|мкед\/мл/i.test(a)&&/мме\/л|мкме\/мл|мкед\/мл/i.test(b));
 const COLORS=['#1f8a85','#3d6fd6','#b04f8f','#d8823a','#6a55c9','#2f9a5c','#c24646','#7a8794'];
 
@@ -736,6 +736,17 @@ function confirmBox(o){const el=document.createElement('div');el.className='moda
   document.body.appendChild(el);const inp=el.querySelector('#mcode');if(inp)setTimeout(()=>inp.focus(),50);
   el.addEventListener('click',e=>{e.stopPropagation();const b=e.target.closest('[data-m]');if(e.target===el||(b&&b.dataset.m==='no')){el.remove();return;}
     if(b&&b.dataset.m==='ok'){if(o.protect&&(inp.value||'').trim().toLowerCase()!=='удалить'){inp.classList.add('bad');haptic();return;}el.remove();o.onOk();}});}
+/* импорт истории из файла metrika-import */
+async function importFile(file){let j;try{j=JSON.parse(await file.text());}catch(e){toast('Не получилось прочитать файл.');return;}
+  if(!j||j.format!=='metrika-import'||!Array.isArray(j.tests)){toast('Это не файл импорта «Метрики».');return;}
+  let p=curP();if(!p){p={id:uid(),name:(j.profile&&j.profile.name)||'Я',sex:'',birth:'',color:COLORS[0],remind:{},created:Date.now()};st.profiles[p.id]=p;setCur(p.id);}
+  if(j.profile){let ch=false;if(!p.sex&&j.profile.sex){p.sex=j.profile.sex;ch=true;}if(!p.birth&&j.profile.birth){p.birth=String(j.profile.birth).slice(0,4);ch=true;}if(ch)persist('p',p.id);}
+  let added=0,skipped=0,rows=0;
+  j.tests.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).forEach(t=>{if(!t||!/^\d{4}-\d{2}-\d{2}$/.test(t.date||'')||!Array.isArray(t.items)||!t.items.length){skipped++;return;}
+    const items=t.items.map(x=>({id:uid(),code:x.code||null,grp:x.code?undefined:(x.grp||undefined),name:String(x.name||''),value:x.value,unit:x.unit||'',lo:x.lo==null?'':x.lo,hi:x.hi==null?'':x.hi,ref:x.ref||''})).filter(x=>x.name&&x.value!==''&&x.value!=null);
+    if(!items.length||findSimilar(p.id,t.date,items)){skipped++;return;}
+    const id=uid();st.tests[id]={id,pid:p.id,date:t.date,lab:String(t.lab||''),note:t.source?'Импорт: '+t.source:'',file:null,items,created:Date.now(),by:SY.me?SY.me.name:'',source:t.source||''};persist('a',id);added++;rows+=items.length;});
+  render();haptic('ok');choiceBox({title:'Импорт завершён',text:'Добавлено анализов: <b>'+added+'</b> ('+rows+' '+plural(rows,'значение','значения','значений')+').'+(skipped?'<br>Пропущено как повторы: '+skipped+'.':''),buttons:[{label:'Отлично',cls:'primary',fn:()=>{closeSheet();tab='ind';render();}}]});}
 /* окно с несколькими вариантами: [{label,cls,fn}] */
 function choiceBox(o){const el=document.createElement('div');el.className='modal';
   el.innerHTML='<div class="modal-in" role="dialog" aria-modal="true"><h3>'+esc(o.title)+'</h3><p>'+o.text+'</p><div class="stack" style="gap:8px;margin-top:14px">'+o.buttons.map((b,i)=>'<button type="button" class="btn block '+(b.cls||'')+'" data-ch="'+i+'">'+esc(b.label)+'</button>').join('')+'</div></div>';
@@ -773,7 +784,7 @@ function spark(pts){const vs=pts.map(x=>num(x.value)).filter(v=>v!=null);if(vs.l
 function indRow(x,p){const it=x.last,s=statusOf(it,p),n=normFor(it,p);const prev=x.pts.length>1?x.pts[x.pts.length-2]:null;
   const tr=prev&&num(prev.value)!=null&&num(it.value)!=null?(num(it.value)>num(prev.value)?'↑':num(it.value)<num(prev.value)?'↓':'→'):'';
   return '<div class="item" data-ind="'+esc(x.key)+'"><span class="dot '+(s==='ok'?'ok':s)+'"></span><div style="min-width:0"><div class="n">'+esc(x.name)+'</div><div class="s">'+fmtDs(it.date)+(refTxt(n)?' · норма '+refTxt(n)+(n.src==='typ'?'*':''):'')+'</div></div><div class="r"><div class="val '+(s?'st-'+s:'')+'">'+esc(fmtN(num(it.value))||it.value)+' <span class="ref">'+esc(it.unit||'')+'</span> '+tr+'</div>'+spark(x.pts)+'</div></div>';}
-function homeHTML(){const p=curP();const ts=testsOf(p.id);const inds=indicatorsOf(p.id);const bad=inds.filter(x=>{const s=statusOf(x.last,p);return s==='low'||s==='high';});
+function homeHTML(){const p=curP();const ts=testsOf(p.id);const inds=indicatorsOf(p.id);const lastD=ts[0]?parseD(ts[0].date):today();const fresh=x=>x.last.date&&(lastD-parseD(x.last.date))/864e5<=400;const bad=inds.filter(x=>{const s=statusOf(x.last,p);return (s==='low'||s==='high')&&fresh(x);});
   let h='<div class="row" style="justify-content:space-between">'+profChip()+'</div>';
   h+='<section class="hero"><div class="names">'+esc(p.name)+'</div><div class="when">'+(ts.length?ts.length+' '+plural(ts.length,'анализ','анализа','анализов')+' · последний '+fmtD(ts[0].date):'Анализов пока нет')+'</div><div class="count"><span class="big">'+inds.length+'</span><span class="lbl">'+plural(inds.length,'показатель','показателя','показателей')+'<br>'+(bad.length?'<b>'+bad.length+' вне нормы</b>':'все в норме')+'</span></div></section>';
   if(!SY.ro)h+='<button type="button" class="btn primary block big-cta" data-act="addtest">'+ICON.up.replace('<svg','<svg width="20" height="20" style="stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"')+'Загрузить анализ</button>';
@@ -884,8 +895,8 @@ function fromAI(ai){const seen={};const items=[];(ai.items||[]).forEach(x=>{cons
   let date=/^\d{4}-\d{2}-\d{2}$/.test(ai.date||'')?ai.date:'';if(date&&(today()-parseD(date))/864e5>365*15)date='';
   return {items:items.filter(Boolean),date,lab:ai.lab||''};}
 /* одна строка бланка → показатель */
-const TXTVAL=/^(отриц|не\s*обн|обнаруж|полож|норм|см\.?\s*комм|отсут|незнач|следы|neg|pos)/i;
-const isValTok=v=>{v=String(v||'').trim();return /^[<>≤≥]?\s*-?\d+(?:[.,]\d+)?\s*\*?$/.test(v)||TXTVAL.test(v);};
+const TXTVAL=/^(отриц|не\s*обн|обнар|полож|норм|см\.?\s*комм|отсут|незнач|следы|neg|pos)/i;
+const isValTok=v=>{v=String(v||'').trim();return /^[<>≤≥]?\s*-?\d+(?:[.,]\d+)?\s*\*?$/.test(v)||TXTVAL.test(v)||/^не$/i.test(v);};
 function parseRef(r){r=String(r||'').trim();let m;if(/см\.?\s*комм/i.test(r))return {lo:'',hi:'',ref:''};
   if((m=r.match(/(-?\d+(?:[.,]\d+)?)\s*[-–—]\s*(\d+(?:[.,]\d+)?)/)))return {lo:num(m[1]),hi:num(m[2]),ref:m[0]};
   if((m=r.match(/(?:[<≤]|до)\s*(\d+(?:[.,]\d+)?)/i)))return {lo:'',hi:num(m[1]),ref:m[0]};
@@ -894,7 +905,7 @@ function parseRef(r){r=String(r||'').trim();let m;if(/см\.?\s*комм/i.test(
 const cap=t=>{t=String(t||'').trim().toLowerCase();return t?t[0].toUpperCase()+t.slice(1):'';};
 function mkItem(r,sec,seen){let name=String(r.name||'').replace(/\s+/g,' ').replace(/[,\s]+$/,'').trim();if(!name||!/[a-zа-яё]/i.test(name))return null;
   let v=String(r.value==null?'':r.value).replace(/\*/g,'').trim();
-  if(/^см\.?\s*комм/i.test(v)){v=cap(r.com||(!/\d/.test(r.ref||'')?r.ref:'')||'');if(!r.com)r.ref='';}
+  if(/^см\.?\s*комм/i.test(v)){const c=[r.com,r.ref,r.unit].find(x=>x&&/[a-zа-яё]{3}/i.test(x)&&!/\d/.test(x)&&!/\//.test(x))||'';v=cap(c);if(c===r.ref)r.ref='';if(c===r.unit)r.unit='';}
   if(v==='')return null;
   const code=matchCode(name,r.unit,sec);
   const rr=(r.lo!=null&&r.lo!==''||r.hi!=null&&r.hi!=='')?{lo:num(r.lo)==null?'':num(r.lo),hi:num(r.hi)==null?'':num(r.hi),ref:r.ref||''}:parseRef(r.ref);
@@ -903,18 +914,21 @@ function mkItem(r,sec,seen){let name=String(r.name||'').replace(/\s+/g,' ').repl
   const key=code||((sec||'')+':'+name.toLowerCase());if(seen){if(seen[key])return null;seen[key]=1;}
   return {id:uid(),code,name:code?CAT[code].name:name,value,unit,lo,hi,ref:rr.ref,grp:code?undefined:(sec||undefined),raw:String(r.raw||'').slice(0,90),on:true};}
 const SEC_RE=/^(клинический|общий\s+анализ|общеклинич|биохими|гормон|липидн|липидограм|коагулограм|анализ\s|иммунолог|электролит|онкомаркер|витамины?$|микроэлемент)/i;
-const STOP_RE=/^(исполнитель|\*\s*результат|внимание|подпись|продолжение|перейти|документ результатов|лабораторного тестирования|•|результаты исследований не|www\.|стр\.\s*\d|не является подписью|подтверждает подлинность)/i;
+const STOP_RE=/^(комментари[ий] к заявке|услуги по взятию|лицензи|исполнитель|\*\s*результат|внимание|подпись|продолжение|перейти|документ результатов|лабораторного тестирования|•|результаты исследований не|www\.|стр\.\s*\d|не является подписью|подтверждает подлинность)/i;
 const secOf=t=>/моч/i.test(t)?'urine':/кал\b|копро/i.test(t)?'stool':'';
 /* строки вида {name,value,unit,ref,com} → показатели; понимает разделы, перенос названия и «см. комм.» */
-function rowsToItems(lines){let sec='',last=null;const out=[];
-  lines.forEach(L=>{if(L.hdr){sec='';last=null;return;}const name=(L.name||'').trim(),val=(L.value||'').trim(),all=[name,val,L.unit,L.ref,L.com].join(' ').trim();if(!all)return;
-    if(STOP_RE.test(name||all)){last=null;return;}
+function rowsToItems(lines){let sec='',last=null,cont=false;const out=[];
+  lines.forEach(L=>{if(L.hdr){if(!cont)sec='';cont=false;return;}const name=(L.name||'').trim(),val=(L.value||'').trim(),all=[name,val,L.unit,L.ref,L.com].join(' ').trim();if(!all)return;
+    if(/^продолжение/i.test(all))cont=true;
+    if(STOP_RE.test(name||all)){if(!cont)last=null;return;}
     if(/^(исследование|наименование|показатель|тест)\b/i.test(name)&&/результат/i.test(all)){last=null;return;}
+    const lowerStart=name&&/^[a-zа-яё%(]/.test(name)&&name[0]===name[0].toLowerCase()&&!/^ph\b/i.test(name);
+    if(name&&last&&name.length<40&&val&&lowerStart&&/^не$/i.test(last.value)){last.name+=' '+name;last.value+=' '+val;return;}
     if(name&&!val){
       if(SEC_RE.test(name)&&!L.unit){sec=secOf(name);last=null;return;}
-      if(last&&!L.unit&&(/^[a-zа-яё%(]/.test(name)||/\)$/.test(name)||/[(,]$/.test(last.name))){last.name+=' '+name;return;}
+      if(last&&!L.unit&&name.length<40&&(lowerStart||/\)$/.test(name)||/[(,-]$/.test(last.name)||/^[А-ЯA-Z]{2,6}(\s|\(|$)/.test(name)&&/[-–]$/.test(last.name))){last.name+=(/[-–]$/.test(last.name)?'':' ')+name;return;}
       return;}
-    if(!name&&last){if(L.com&&last.needCom&&!last.com)last.com=L.com;return;}
+    if(!name&&last){if(val&&/^не$/i.test(last.value))last.value+=' '+val;if(L.com&&last.needCom&&!last.com)last.com=L.com;return;}
     if(name&&isValTok(val)){last={name,value:val,unit:L.unit||'',ref:L.ref||'',com:L.com||'',sec,raw:all,needCom:/^см\.?\s*комм/i.test(val)};out.push(last);}
   });
   const seen={};return out.map(r=>mkItem(r,r.sec,seen)).filter(Boolean);}
@@ -922,19 +936,26 @@ function rowsToItems(lines){let sec='',last=null;const out=[];
 function pdfPagesToLines(pages){const lines=[];let cols=null;const head=[];
   pages.forEach((items,pi)=>{const rows=[];items.slice().sort((a,b)=>b.y-a.y||a.x-b.x).forEach(it=>{const r=rows.find(r=>Math.abs(r.y-it.y)<=3);if(r)r.items.push(it);else rows.push({y:it.y,items:[it]});});
     rows.sort((a,b)=>b.y-a.y);
-    const hr=rows.find(r=>r.items.some(i=>/^результат/i.test(i.s.trim()))&&r.items.length>=2);
+    const hr=rows.find(r=>r.items.some(i=>/^результат(\s|$)/i.test(i.s.trim()))&&r.items.some(i=>/^(ед|рефер|норм|исследован|показател|наименован|тест)/i.test(i.s.trim())));
     if(hr){const fx=re=>{const i=hr.items.find(i=>re.test(i.s.trim()));return i?i.x:null;};
-      const xr=fx(/^результат/i),xu=fx(/^ед(иниц|\.)/i),xf=fx(/^(референс|норм|границ)/i),xc=fx(/^коммент/i);
-      cols={xr,xu:xu||xr+60,xf:xf||(xu?xu+60:xr+120),xc:xc||1e9};}
+      const xr=fx(/^результат(\s|$)/i),xp=fx(/^предыдущ/i),xu=fx(/^ед(иниц|\.)/i),xf=fx(/^(рефер|норм|границ)/i),xc=fx(/^коммент/i);
+      cols={xr,xp:xp||null,xu:xu||xr+60,xf:xf||(xu?xu+60:xr+120),xc:xc||1e9};}
     if(hr)lines.push({hdr:true});
     rows.forEach(r=>{const txt=r.items.sort((a,b)=>a.x-b.x).map(i=>i.s).join(' ');
       if(pi===0&&(!hr||r.y>hr.y))head.push(txt);
       if(!cols||!hr&&pi===0||hr&&r.y>=hr.y-12)return;
+      if(/^(дата|пациент|возраст|пол|№|штрихкод|контракт|пункт|фио|ф\.и\.о|врач|инз)[\s:]/i.test(txt))return;
       const L={name:'',value:'',unit:'',ref:'',com:''};const add=(k,t)=>{L[k]=(L[k]?L[k]+' ':'')+t.trim();};
-      r.items.forEach(i=>{const x=i.x+2;add(x<cols.xr?'name':x<cols.xu?'value':x<cols.xf?'unit':x<cols.xc?'ref':'com',i.s);});
+      r.items.forEach(i=>{const x=i.x+2,t=i.s.trim();if(!t)return;
+        if(x<cols.xr-12){add('name',t);return;}
+        if(cols.xp&&x>=cols.xp-2&&x<cols.xu-2)return;
+        if(x>=cols.xc-10){add('com',t);return;}
+        if(!L.value&&isValTok(t)){L.value=t;return;}
+        if(/\d\s*[-–—]\s*\d|^[<>≤≥]|^(до|от)\s/i.test(t)||(L.value&&/^(отриц|не\s*обн|отсут|норм)/i.test(t))){add('ref',t);return;}
+        if(!L.unit&&!L.ref){L.unit=t;return;}add(L.ref?'com':'ref',t);});
       lines.push(L);});});
   return {lines,head:head.join('\n')};}
-function findDate(text){text=String(text||'');let m=text.match(/(?:взяти[яе]|взят|забор[а]?|сдачи|дата\s+анализа|дата\s+исследования)[^\d\n]{0,40}(\d{2})[.\/](\d{2})[.\/](\d{4})/i);
+function findDate(text){text=String(text||'');let m=text.match(/(?:взяти[яе]|взят|забор[а]?|сдачи|дата\s+анализа|дата\s+исследования|дата\s+заказа|дата\s+регистрации)[^\d\n]{0,40}(\d{2})[.\/](\d{2})[.\/](\d{4})/i);
   if(!m){const all=[...text.matchAll(/(рожд[^\d\n]{0,30})?(\d{2})[.\/](\d{2})[.\/](20\d{2})/gi)].filter(x=>!x[1]);if(all.length)m=[0,all[0][2],all[0][3],all[0][4]];}
   if(!m)return '';const d=m[3]+'-'+m[2]+'-'+m[1];return isNaN(parseD(d))?'':d;}
 const LABS=['Синэво','Synevo','Инвитро','Invitro','Хеликс','Helix','ЛОДЭ','Lode','Синлаб','Synlab','Гемотест','CMD','Кдл','KDL','Медэкспресс','Нордин','Мой доктор','Амадей'];
@@ -1030,7 +1051,8 @@ function chartSVG(x,p){const pts=x.pts.filter(q=>num(q.value)!=null);if(!pts.len
   [mn+pad2,(mn+mx)/2,mx-pad2].forEach(v=>{s+='<text x="'+(L-6)+'" y="'+(Y(v)+4).toFixed(1)+'" text-anchor="end">'+fmtN(+v.toPrecision(3))+'</text><line x1="'+L+'" x2="'+(W-R)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'" stroke="var(--line)"/>';});
   s+='<polyline fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" points="'+pts.map((q,i)=>X(i).toFixed(1)+','+Y(num(q.value)).toFixed(1)).join(' ')+'"/>';
   pts.forEach((q,i)=>{const stt=statusOf(q,p);s+='<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(num(q.value)).toFixed(1)+'" r="4.5" fill="'+(stt==='high'?'var(--crit)':stt==='low'?'#3d7be0':'var(--accent)')+'" stroke="var(--bg)" stroke-width="2"/>';});
-  s+='<text x="'+L+'" y="'+(H-6)+'">'+esc(fmtDs(pts[0].date))+'</text>'+(pts.length>1?'<text x="'+(W-R)+'" y="'+(H-6)+'" text-anchor="end">'+esc(fmtDs(pts[pts.length-1].date))+'</text>':'');
+  const multiY=(pts[0].date||'').slice(0,4)!==(pts[pts.length-1].date||'').slice(0,4);const fd=d=>multiY?fmtD(d):fmtDs(d);
+  s+='<text x="'+L+'" y="'+(H-6)+'">'+esc(fd(pts[0].date))+'</text>'+(pts.length>1?'<text x="'+(W-R)+'" y="'+(H-6)+'" text-anchor="end">'+esc(fd(pts[pts.length-1].date))+'</text>':'');
   return s+'</svg>';}
 function openIndicator(key){const p=curP();const x=indicatorsOf(p.id).find(y=>y.key===key);const c=CAT[key]||null;
   if(!x&&!c){return;}
@@ -1080,6 +1102,7 @@ function openSettings(){refreshHello();
   openSheet(top('Настройки')+'<div class="stack">'+(profList().length&&((SY.ready&&SY.owner)||!TGA)?'<button type="button" class="btn primary block big-cta" data-act="pdf">'+ICON.dl+'Отчёт для врача (PDF) — '+esc(curP().name)+'</button>':'')+
    diagCard()+shareCard()+protectCard()+
    '<section class="card"><div class="h"><h2>Распознавание бланков</h2></div><p class="small" style="margin:0;color:var(--txt-2)">'+(SY.ai?'Подключена нейросеть Gemini — распознаёт точнее.':'Работает встроенное распознавание текста Google Диска. Для большей точности можно подключить ключ Gemini в настройках скрипта (GEMINI_KEY).')+'</p></section>'+
+   (SY.ro?'':'<section class="card"><div class="h"><h2>Импорт истории</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Файл импорта (.json) с анализами за прошлые годы. Повторы пропускаются автоматически.</p><label class="btn block" style="position:relative">'+ICON.up.replace('<svg','<svg width="18" height="18" style="stroke:currentColor;fill:none;stroke-width:2"')+'Выбрать файл импорта<input type="file" accept=".json,application/json" data-import style="position:absolute;inset:0;opacity:0"></label></section>')+
    '<section class="card"><div class="h"><h2>Оформление</h2></div><div class="seg" role="group">'+[['auto','Как в системе'],['light','Светлая'],['dark','Тёмная']].map(([k,l])=>'<button type="button" data-theme-set="'+k+'" aria-pressed="'+((localTheme()||'auto')===k)+'">'+l+'</button>').join('')+'</div></section>'+
    '<p class="note" style="margin:0">Приложение не ставит диагнозов и не заменяет врача. Нормы ориентировочные.<br>Версия '+APP_VER+(TGA?(TGA.initData?' · Telegram ✓':' · Telegram без подписи'):'')+'</p></div>','settings');}
 const fmtAgo=at=>{if(!at)return '';const d=Date.now()-at;if(d<60e3)return 'только что';if(d<3600e3)return Math.round(d/60e3)+' мин назад';const t=new Date(at);return (ymd(t)===ymd(today())?'сегодня':fmtDs(ymd(t)))+', '+t.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});};
@@ -1141,6 +1164,7 @@ document.addEventListener('input',e=>{const t=e.target;
 });
 document.addEventListener('change',e=>{const t=e.target;
   if(t.dataset.blank!==undefined&&t.files&&t.files[0]){const f=t.files[0];t.value='';handleBlank(f);return;}
+  if(t.dataset.import!==undefined&&t.files&&t.files[0]){const f=t.files[0];t.value='';importFile(f);return;}
   if(t.dataset.remind){const p=curP();p.remind=p.remind||{};if(t.value)p.remind[t.dataset.remind]=t.value;else delete p.remind[t.dataset.remind];persist('p',p.id);return;}
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!closeLb())closeSheet();}if(e.key==='Enter'&&e.target.id==='rv-add'){e.preventDefault();sheetIn.querySelector('[data-act="rvadd"]').click();}});
@@ -1152,7 +1176,7 @@ function crashScreen(err){if(document.getElementById('crash'))return;const el=do
   el.querySelector('#crashReset').onclick=()=>{try{['health-v1','health-pending'].forEach(k=>localStorage.removeItem(k));}catch(e){}location.reload();};}
 const _render=render;render=function(){try{_render();}catch(e){crashScreen(e);}};
 window.addEventListener('error',e=>{if(e&&e.message&&/Script error/.test(e.message))return;if(!view.innerHTML.trim())crashScreen(e.error||e.message);});
-window.__h={get draft(){return draft},get st(){return st}};
+window.__h={get draft(){return draft},get st(){return st},parsePages:pages=>{const pl=pdfPagesToLines(pages);return {items:rowsToItems(pl.lines),date:findDate(pl.head),lab:findLab(pl.head+' '+pages.flat().map(i=>i.s).join(' '))};},parseText:t=>parseOCR(t),lines:pages=>pdfPagesToLines(pages).lines};
 try{loadLocal();}catch(e){st=normalize({});}
 render();initStore().catch(crashScreen);
 })();
