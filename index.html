@@ -494,6 +494,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
+const APP_VER='1.2';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -932,7 +933,9 @@ function exportPDF(btn){const p=curP();const html=buildReport(p);
   toast('PDF будет доступен после подключения сервера.');}
 
 /* ---------- Настройки, доступ, защита ---------- */
-function diagCard(){if(!(TGA&&SYNC_URL)||SY.ready||SYNC_URL.indexOf('%%')===0)return '';
+function diagCard(){if(!(TGA&&SYNC_URL)||SYNC_URL.indexOf('%%')===0)return '';
+  if(SY.ready&&!SY.owner)return '<section class="card"><div class="h"><h2>Подключение</h2><span class="pill p-warn">не владелец</span></div><p class="small" style="margin:0;color:var(--txt-2)">Сервер подключён, но владельцем записан другой аккаунт Telegram. Чтобы стать владельцем: в Apps Script выберите функцию resetAccess → «Выполнить», затем закройте и снова откройте приложение.</p></section>';
+  if(SY.ready)return '';
   const e=SY.lastErr||'';const why=e==='auth'?'Сервер не узнал подпись Telegram. Проверьте свойство BOT_TOKEN в Apps Script: это должен быть токен именно этого бота, без пробелов. После исправления развёртывание менять не нужно.':
     (e==='TypeError'||e==='SyntaxError')?'Сервер не отвечает как надо. Проверьте развёртывание: «Веб-приложение», выполнять от имени «Я», доступ «Все». Если меняли код — нужна новая версия развёртывания.':
     e?'Ошибка сервера: '+e+(SY.lastMsg&&SY.lastMsg!==e?' ('+SY.lastMsg+')':''):'Подключаюсь к серверу…';
@@ -952,7 +955,7 @@ function openSettings(){refreshHello();
    diagCard()+shareCard()+protectCard()+
    '<section class="card"><div class="h"><h2>Распознавание бланков</h2></div><p class="small" style="margin:0;color:var(--txt-2)">'+(SY.ai?'Подключена нейросеть Gemini — распознаёт точнее.':'Работает встроенное распознавание текста Google Диска. Для большей точности можно подключить ключ Gemini в настройках скрипта (GEMINI_KEY).')+'</p></section>'+
    '<section class="card"><div class="h"><h2>Оформление</h2></div><div class="seg" role="group">'+[['auto','Как в системе'],['light','Светлая'],['dark','Тёмная']].map(([k,l])=>'<button type="button" data-theme-set="'+k+'" aria-pressed="'+((localTheme()||'auto')===k)+'">'+l+'</button>').join('')+'</div></section>'+
-   '<p class="note" style="margin:0">Приложение не ставит диагнозов и не заменяет врача. Нормы ориентировочные.</p></div>','settings');}
+   '<p class="note" style="margin:0">Приложение не ставит диагнозов и не заменяет врача. Нормы ориентировочные.<br>Версия '+APP_VER+(TGA?(TGA.initData?' · Telegram ✓':' · Telegram без подписи'):'')+'</p></div>','settings');}
 const fmtAgo=at=>{if(!at)return '';const d=Date.now()-at;if(d<60e3)return 'только что';if(d<3600e3)return Math.round(d/60e3)+' мин назад';const t=new Date(at);return (ymd(t)===ymd(today())?'сегодня':fmtDs(ymd(t)))+', '+t.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});};
 function loadingSheet(t){openSheet(top(t)+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div></section></div>');}
 async function openLog(){loadingSheet('Журнал изменений');try{const r=await api('log',{limit:200});const it=r.items||[];openSheet(top('Журнал изменений')+'<div class="stack">'+(it.length?'<section class="card"><div class="list">'+it.map(x=>'<div class="li" style="cursor:default"><span class="dot acc"></span><div><div class="t">'+esc(x.title)+'</div><div class="s" style="color:var(--txt-2)">'+esc(x.what)+'</div><div class="s">'+esc(x.by||'—')+' · '+fmtAgo(x.at)+'</div></div><div class="r"></div></div>').join('')+'</div></section>':'<section class="card"><div class="empty">Изменений пока нет.</div></section>')+'</div>');}catch(e){openSheet(top('Журнал изменений')+'<div class="stack"><section class="card"><div class="empty">Не получилось загрузить.</div></section></div>');}}
