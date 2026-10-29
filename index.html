@@ -514,7 +514,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='2.0';
+const APP_VER='2.1';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -943,7 +943,7 @@ function openProfile(id){const p=id?st.profiles[id]:{id:uid(),name:'',sex:'',bir
    '<input class="title" data-pf="name" value="'+esc(p.name)+'" placeholder="'+(PERSONAL?'Ваше имя':'Имя, например «Мама»')+'" autocomplete="off">'+
    '<section class="card"><div class="stack" style="gap:12px"><div class="fld"><label>Пол</label><div class="seg" role="group">'+[['f','Женский'],['m','Мужской']].map(([k,l])=>'<button type="button" data-psex="'+k+'" aria-pressed="'+(p.sex===k)+'">'+l+'</button>').join('')+'</div></div>'+
    '<div class="fld"><label for="pf-dob">Дата рождения</label><input id="pf-dob" data-pf="dob" type="date" value="'+esc(p.dob||'')+'"></div>'+
-   '<div class="row" style="gap:10px;flex-wrap:nowrap"><div class="fld"><label for="pf-h">Рост, см</label><input id="pf-h" data-pf="height" type="number" inputmode="decimal" value="'+esc(p.height||'')+'" placeholder="184"></div><div class="fld"><label for="pf-w">Вес сейчас, кг</label><input id="pf-w" data-pf="wNow" type="number" inputmode="decimal" value="" placeholder="'+esc((p.weights&&p.weights.length?p.weights.slice().sort((a,b)=>a.date.localeCompare(b.date)).pop().kg:'')||'84')+'"></div></div>'+
+   '<div class="row" style="gap:10px;flex-wrap:nowrap"><div class="fld"><label for="pf-h">Рост, см</label><input id="pf-h" data-pf="height" type="number" inputmode="decimal" value="'+esc(p.height||'')+'" placeholder="184"></div><div class="fld"><label for="pf-w">Вес сейчас, кг</label><input id="pf-w" data-pf="wNow" type="number" inputmode="decimal" value="" placeholder="'+esc((wlogGet(p).slice(-1)[0]||{}).kg||'84')+'"></div></div>'+
    '<div class="fld"><label>Цвет</label><div class="colors">'+COLORS.map(c=>'<button type="button" data-pcolor="'+c+'" style="background:'+c+'" aria-pressed="'+(p.color===c)+'" aria-label="Цвет"></button>').join('')+'</div></div></div></section>'+
    '<button type="button" class="btn primary block big-cta" data-act="saveprof">'+(isNew?'Создать':'Сохранить')+'</button></div>','prof',p.id);
   if(isNew)setTimeout(()=>{const i=sheetIn.querySelector('[data-pf="name"]');if(i)i.focus();},60);}
@@ -1211,16 +1211,63 @@ function chartSVG(x,p){const pts=x.pts.filter(q=>num(q.value)!=null);if(!pts.len
   const multiY=(pts[0].date||'').slice(0,4)!==(pts[pts.length-1].date||'').slice(0,4);const fd=d=>multiY?fmtD(d):fmtDs(d);
   s+='<text x="'+L+'" y="'+(H-6)+'">'+esc(fd(pts[0].date))+'</text>'+(pts.length>1?'<text x="'+(W-R)+'" y="'+(H-6)+'" text-anchor="end">'+esc(fd(pts[pts.length-1].date))+'</text>':'');
   return s+'</svg>';}
+/* ---------- Вес: компактное хранение, импорт из Apple «Здоровья» и CSV ---------- */
+function wlogGet(p){const m={};(p.weights||[]).forEach(w=>{if(w&&w.date&&num(w.kg)!=null)m[w.date]=num(w.kg);});
+  String(p.wlog||'').split(';').forEach(s=>{const x=s.match(/^(\d{6}):(\d+(?:\.\d+)?)$/);if(x)m['20'+x[1].slice(0,2)+'-'+x[1].slice(2,4)+'-'+x[1].slice(4,6)]=+x[2];});
+  return Object.keys(m).sort().map(d=>({date:d,kg:m[d]}));}
+function wlogSet(p,arr){let a=arr.slice().sort((x,y)=>x.date.localeCompare(y.date));
+  const enc=a=>a.map(w=>w.date.replace(/-/g,'').slice(2)+':'+(+w.kg).toFixed(1).replace(/\.0$/,'')).join(';');
+  let s=enc(a);if(s.length>40000){const cut=ymd(new Date(Date.now()-365*864e5));const old={},keep=[];a.forEach(w=>{if(w.date<cut){const d=parseD(w.date);const k=ymd(new Date(d.getTime()-((d.getDay()+6)%7)*864e5));(old[k]=old[k]||[]).push(w.kg);}else keep.push(w);});
+    a=Object.keys(old).map(k=>({date:k,kg:+(old[k].reduce((s,v)=>s+v,0)/old[k].length).toFixed(1)})).concat(keep);s=enc(a.sort((x,y)=>x.date.localeCompare(y.date)));}
+  p.wlog=s;delete p.weights;}
+function wlogAdd(p,date,kg){const a=wlogGet(p).filter(w=>w.date!==date);a.push({date,kg});wlogSet(p,a);}
+/* усреднение по неделям, если точек слишком много для графика */
+function thinPts(pts,max){if(pts.length<=max)return pts;const g={};pts.forEach(q=>{const d=parseD(q.date);const k=ymd(new Date(d.getTime()-((d.getDay()+6)%7)*864e5));(g[k]=g[k]||[]).push(q);});
+  let out=Object.keys(g).sort().map(k=>{const a=g[k];const v=a.reduce((s,q)=>s+num(q.value),0)/a.length;return Object.assign({},a[a.length-1],{date:k,value:+v.toFixed(1)});});
+  if(out.length>max){const m={};out.forEach(q=>{const k=q.date.slice(0,7)+'-15';(m[k]=m[k]||[]).push(q);});out=Object.keys(m).sort().map(k=>{const a=m[k];return Object.assign({},a[a.length-1],{date:k,value:+(a.reduce((s,q)=>s+num(q.value),0)/a.length).toFixed(1)});});}
+  return out;}
+let FFLATE=null;
+function loadFflate(){if(FFLATE)return FFLATE;FFLATE=new Promise((res,rej)=>{if(window.fflate){res(window.fflate);return;}const sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js';sc.onload=()=>window.fflate?res(window.fflate):rej(new Error('fflate'));sc.onerror=()=>{FFLATE=null;rej(new Error('fflate'));};document.head.appendChild(sc);});return FFLATE;}
+function healthImportBlock(){return '<div class="small" style="font-weight:700;margin:12px 0 4px">Импорт веса из «Здоровья» iPhone</div><div class="small" style="color:var(--txt-2);line-height:1.45;margin-bottom:8px">Приложение «Здоровье» → фото профиля → «Экспортировать все медданные» → сохранить в «Файлы». Здесь выберите этот архив (export.zip). Подойдёт и CSV со столбцами «дата; вес».</div><label class="btn block" style="position:relative">'+ICON.up.replace('<svg','<svg width="18" height="18" style="stroke:currentColor;fill:none;stroke-width:2"')+'Выбрать архив или CSV<input type="file" accept=".zip,.xml,.csv,.txt,application/zip,text/xml,text/csv" data-health style="position:absolute;inset:0;opacity:0"></label>';}
+/* потоковый разбор XML «Здоровья»: ищем записи веса и роста */
+function healthScanner(){const W={},H={};let carry='';
+  const take=txt=>{const s=carry+txt;const re=/<Record type="HKQuantityTypeIdentifier(BodyMass|Height)"[^>]*>/g;let m,last=0;
+    while((m=re.exec(s))){last=re.lastIndex;const tag=m[0];const v=+((tag.match(/ value="([\d.]+)"/)||[])[1]);const u=(tag.match(/ unit="([^"]+)"/)||[])[1]||'';const d=((tag.match(/ startDate="(\d{4}-\d{2}-\d{2})/)||[])[1]);if(!d||!v)continue;
+      if(m[1]==='BodyMass'){const kg=u==='lb'?v*0.453592:u==='g'?v/1000:v;if(kg>25&&kg<300)(W[d]=W[d]||[]).push(kg);}else{const cm=u==='m'?v*100:u==='in'?v*2.54:u==='ft'?v*30.48:v;if(cm>100&&cm<230)H[d]=cm;}}
+    const cut=Math.max(last,s.length-4000);carry=s.slice(cut);};
+  return {take,result:()=>({w:Object.keys(W).sort().map(d=>({date:d,kg:+(W[d].reduce((a,b)=>a+b,0)/W[d].length).toFixed(1)})),h:Object.keys(H).sort().map(d=>({date:d,cm:Math.round(H[d])}))})};}
+async function readHealth(file,prog){const sc=healthScanner();const dec=new TextDecoder();const CH=4*1024*1024;const isZip=/\.zip$/i.test(file.name)||/zip/.test(file.type);
+  if(!isZip){for(let o=0;o<file.size;o+=CH){sc.take(dec.decode(new Uint8Array(await file.slice(o,o+CH).arrayBuffer()),{stream:true}));prog(Math.min(99,Math.round(o/file.size*100)));}return sc.result();}
+  const ff=await loadFflate();let target=null,best=0;
+  await new Promise(async(res,rej)=>{const uz=new ff.Unzip();uz.register(ff.UnzipInflate);
+    uz.onfile=f=>{const n=f.name.toLowerCase();if(!/\.xml$/.test(n)||/cda/.test(n)||/workout-routes|electrocardiograms/.test(n))return;if(f.originalSize&&f.originalSize<best)return;best=f.originalSize||best;target=f.name;const d2=new TextDecoder();
+      f.ondata=(err,chunk,final)=>{if(err){rej(err);return;}sc.take(d2.decode(chunk,{stream:!final}));};f.start();};
+    try{for(let o=0;o<file.size;o+=CH){const buf=new Uint8Array(await file.slice(o,o+CH).arrayBuffer());uz.push(buf,o+CH>=file.size);prog(Math.min(99,Math.round(o/file.size*100)));await new Promise(r=>setTimeout(r,0));}res();}catch(e){rej(e);}});
+  return sc.result();}
+function readCSV(text){const out={};text.split(/\r?\n/).forEach(l=>{let d=null;let m=l.match(/(\d{4})[-.\/](\d{2})[-.\/](\d{2})/);if(m)d=m[1]+'-'+m[2]+'-'+m[3];else if((m=l.match(/(\d{2})[.\/](\d{2})[.\/](\d{4})/)))d=m[3]+'-'+m[2]+'-'+m[1];if(!d)return;
+  const rest=l.replace(m[0],' ');const nums=(rest.match(/\d+(?:[.,]\d+)?/g)||[]).map(x=>+x.replace(',','.')).filter(v=>v>25&&v<300);if(nums.length)out[d]=nums[0];});
+  return {w:Object.keys(out).sort().map(d=>({date:d,kg:out[d]})),h:[]};}
+async function importHealth(file){const p=curP();if(!p)return;
+  openSheet(top('Импорт веса')+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div><p class="small" style="margin:8px 0 0;color:var(--txt-2)">Читаю <b>'+esc(file.name)+'</b> · <span id="hp">0</span>%</p><p class="note" style="margin:6px 0 0">Большой архив «Здоровья» может читаться минуту-две. Не закрывайте приложение.</p></section></div>','busy');
+  try{let r;if(/\.(csv|txt|tsv)$/i.test(file.name))r=readCSV(await file.text());else r=await readHealth(file,v=>{const e=$('#hp');if(e)e.textContent=v;});
+    if(!r.w.length&&!r.h.length){closeSheet();toast('В файле не нашлось записей веса.');return;}
+    const before=wlogGet(p);const m={};before.forEach(w=>m[w.date]=w.kg);let added=0;r.w.forEach(w=>{if(m[w.date]==null)added++;m[w.date]=w.kg;});
+    wlogSet(p,Object.keys(m).map(d=>({date:d,kg:m[d]})));
+    if(r.h.length){const h=r.h[r.h.length-1];if(!num(p.height)){p.height=h.cm;p.hDate=h.date;}}
+    persist('p',p.id);render();
+    choiceBox({title:'Вес загружен',text:'Записей: <b>'+r.w.length+'</b>'+(r.w.length?' (с '+fmtD(r.w[0].date)+' по '+fmtD(r.w[r.w.length-1].date)+')':'')+', новых дней: '+added+'.'+(r.h.length?'<br>Рост: '+r.h[r.h.length-1].cm+' см.':''),buttons:[{label:'Открыть график',cls:'primary',fn:()=>openIndicator('V_WEIGHT')}]});closeSheet();}
+  catch(e){closeSheet();toast('Не получилось прочитать файл: '+(e.message||'ошибка'));}}
+
 /* ---------- Показатели в стиле карточек: мини-график с полосой нормы ---------- */
 let indQ='',indPer=0;
 const perOK=d=>!indPer||!d||(today()-parseD(d))/864e5<=indPer*30.5;
-function vitalsOf(p){const out=[];const ws=(p.weights||[]).filter(w=>num(w.kg)!=null&&w.date).sort((a,b)=>a.date.localeCompare(b.date));const h=num(p.height);
+function vitalsOf(p){const out=[];const ws=wlogGet(p);const h=num(p.height);
   if(ws.length)out.push({key:'V_WEIGHT',name:'Вес',pts:ws.map(w=>({date:w.date,value:num(w.kg),unit:'кг',lo:'',hi:''}))});
   if(ws.length&&h)out.push({key:'V_BMI',name:'Индекс массы тела',pts:ws.map(w=>({date:w.date,value:+(num(w.kg)/Math.pow(h/100,2)).toFixed(1),unit:'кг/м²',lo:18.5,hi:24.9}))});
   if(h)out.push({key:'V_HEIGHT',name:'Рост',pts:[{date:p.hDate||(ws.length?ws[ws.length-1].date:''),value:h,unit:'см',lo:'',hi:''}]});
   out.forEach(x=>{x.code=null;x.grp='vital';x.last=x.pts[x.pts.length-1];});return out;}
 const stColor=s=>s==='high'?'var(--crit)':s==='low'?'#3d7be0':s==='ok'?'var(--good)':'var(--txt-3)';
-function miniChart(x,p){const pts=x.pts.filter(q=>num(q.value)!=null&&perOK(q.date));const W=96,H=50;
+function miniChart(x,p){const pts=thinPts(x.pts.filter(q=>num(q.value)!=null&&perOK(q.date)),60);const W=96,H=50;
   let s='<svg class="imini" viewBox="0 0 '+W+' '+H+'" aria-hidden="true"><rect x="0.5" y="0.5" width="'+(W-1)+'" height="'+(H-1)+'" rx="9" fill="var(--surface-2)" stroke="var(--line)"/>';
   if(!pts.length)return s+'</svg>';
   const n=normFor(x.last,p);const vals=pts.map(q=>num(q.value));let mn=Math.min(...vals),mx=Math.max(...vals);
@@ -1262,7 +1309,7 @@ function bigChart(x,p,pts){if(!pts.length)return '';const W=340,H=190,L=8,R=8,T=
   s+='<line x1="'+xl.toFixed(1)+'" x2="'+xl.toFixed(1)+'" y1="'+T+'" y2="'+(H-B+4)+'" stroke="'+c+'" stroke-width="1.4"/>';
   if(pts.length>1){let d='M'+X(0).toFixed(1)+','+Y(vals[0]).toFixed(1);for(let i=1;i<pts.length;i++){const x0=X(i-1),x1=X(i),y0=Y(vals[i-1]),y1=Y(vals[i]),cx=(x0+x1)/2;d+=' C'+cx.toFixed(1)+','+y0.toFixed(1)+' '+cx.toFixed(1)+','+y1.toFixed(1)+' '+x1.toFixed(1)+','+y1.toFixed(1);}
     s+='<path d="'+d+'" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round"/>';}
-  pts.forEach((q,i)=>{const s2=statusOf(q,p);const last=i===pts.length-1;s+='<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(vals[i]).toFixed(1)+'" r="'+(last?7:3.6)+'" fill="'+(last?c:'var(--surface)')+'" stroke="'+stColor(s2)+'" stroke-width="'+(last?0:2)+'"/>';});
+  pts.forEach((q,i)=>{const s2=statusOf(q,p);const last=i===pts.length-1;if(!last&&pts.length>40)return;s+='<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(vals[i]).toFixed(1)+'" r="'+(last?7:3.6)+'" fill="'+(last?c:'var(--surface)')+'" stroke="'+stColor(s2)+'" stroke-width="'+(last?0:2)+'"/>';});
   const lv=fmtN(vals[vals.length-1]);const bx=Math.min(xl+10,W-R-6-lv.length*8-12);s+='<rect x="'+bx.toFixed(1)+'" y="'+(Y(vals[vals.length-1])-12).toFixed(1)+'" width="'+(lv.length*8+12)+'" height="24" rx="8" fill="var(--surface)" stroke="var(--line)"/><text x="'+(bx+6).toFixed(1)+'" y="'+(Y(vals[vals.length-1])+5).toFixed(1)+'" style="font-size:13px;font-weight:700;fill:'+c+'">'+lv+'</text>';
   const idx=pts.length<=4?pts.map((_,i)=>i):[0,Math.round((pts.length-1)/3),Math.round(2*(pts.length-1)/3),pts.length-1];const used=[];
   idx.forEach(i=>{const xx=X(i);if(used.some(u=>Math.abs(u-xx)<52))return;used.push(xx);const d=pts[i].date||'';s+='<text x="'+xx.toFixed(1)+'" y="'+(H-10)+'" text-anchor="middle" style="font-size:10.5px'+(i===pts.length-1?';font-weight:700;fill:'+c:'')+'">'+(d?d.slice(8,10)+'.'+d.slice(5,7)+'.'+d.slice(2,4):'')+'</text>';});
@@ -1276,21 +1323,22 @@ function openIndicator(key){const p=curP();let x=indicatorsOf(p.id).find(y=>y.ke
       '<div style="font-size:42px;font-weight:800;margin:4px 0 2px;font-variant-numeric:tabular-nums">'+(s?'<i class="sdot" style="background:'+stColor(s)+';width:14px;height:14px;vertical-align:middle;margin-right:8px"></i>':'')+esc(num(last.value)!=null?fmtN(num(last.value)):String(last.value))+' <span style="font-size:20px;font-weight:600;color:var(--txt-2)">'+esc(last.unit||'')+'</span></div>'+
       (last.lab?'<div class="small muted">'+esc(last.lab)+'</div>':'')+
       (refTxt(n)||!vital?'<div class="li" style="cursor:default;text-align:left;margin-top:10px;border-top:1px solid var(--line)"><span class="sdot" style="background:var(--good)"></span><div><div class="t">Норма'+(n.src==='own'?' (своя)':n.src==='typ'?' (типичная'+(p.sex?' для '+(p.sex==='m'?'мужчины':'женщины'):'')+(ag?' '+ag+' '+plural(ag,'год','года','лет'):'')+')':n.src==='blank'&&refTxt(n)?' (с бланка)':'')+'</div></div><div class="r" style="color:var(--accent-ink)">'+(refTxt(n)||'—')+' '+esc(refTxt(n)?last.unit||'':'')+'</div></div>'+(vital||SY.ro?'':'<button type="button" class="nlink" data-normset="'+esc(key)+'">Настроить норму</button>'):'')+'</section>';}
-  if(vital&&!SY.ro){if(key==='V_WEIGHT'||key==='V_BMI')h+='<section class="card"><div class="h"><h2>Новое измерение веса</h2></div><div class="row" style="gap:8px;flex-wrap:nowrap"><input class="inp" type="date" id="vw-d" value="'+ymd(today())+'"><input class="inp" type="number" inputmode="decimal" id="vw-kg" placeholder="кг" style="max-width:110px"><button type="button" class="btn primary" data-act="addweight">Добавить</button></div></section>';
-    else h+='<button type="button" class="btn block" data-editprof="'+p.id+'">Изменить рост в профиле</button>';}
   const pts=x?x.pts.filter(q=>num(q.value)!=null&&perOK(q.date)):[];
   if(x&&x.pts.length>0&&x.pts.some(q=>num(q.value)!=null)){
-    h+='<section class="card"><div class="h"><h2>Динамика <span style="color:var(--accent);text-transform:none;letter-spacing:0">'+({0:'за всё время',36:'за 3 года',12:'за год',6:'за полгода'}[indPer])+'</span></h2></div>'+bigChart(x,p,pts.length?pts:x.pts.filter(q=>num(q.value)!=null))+
+    h+='<section class="card"><div class="h"><h2>Динамика <span style="color:var(--accent);text-transform:none;letter-spacing:0">'+({0:'за всё время',36:'за 3 года',12:'за год',6:'за полгода'}[indPer])+'</span></h2></div>'+bigChart(x,p,thinPts(pts.length?pts:x.pts.filter(q=>num(q.value)!=null),140))+
       '<div class="seg" role="group" style="margin-top:8px">'+[[0,'Всё'],[36,'3 года'],[12,'Год'],[6,'Полгода']].map(([m,l])=>'<button type="button" data-per="'+m+'" data-perind="'+esc(key)+'" aria-pressed="'+(indPer===m)+'">'+l+'</button>').join('')+'</div>';
     const vs=(pts.length?pts:x.pts).map(q=>num(q.value)).filter(v=>v!=null);
-    if(vs.length>1){const prev=vs[vs.length-2],cur=vs[vs.length-1];const dl=cur-prev;const pc=prev?dl/prev*100:0;
-      h+='<div class="stats"><div><b>'+fmtN(+median(vs).toPrecision(4))+'</b><span>медиана</span></div><div><b>'+fmtN(Math.min(...vs))+'</b><span>минимум</span></div><div><b>'+fmtN(Math.max(...vs))+'</b><span>максимум</span></div><div><b style="color:'+(dl>0?'var(--crit)':dl<0?'#3d7be0':'inherit')+'">'+(dl>0?'+':'')+fmtN(+dl.toPrecision(3))+'</b>'+(prev?'<small style="color:'+(dl>0?'var(--crit)':dl<0?'#3d7be0':'inherit')+'">'+(pc>0?'+':'')+Math.round(pc)+'%</small>':'')+'<span>изменение</span></div></div><div class="small muted" style="margin-top:6px;text-align:center">'+vs.length+' '+plural(vs.length,'измерение','измерения','измерений')+'</div>';}
+    if(vs.length>1){const prev=vital?vs[0]:vs[vs.length-2],cur=vs[vs.length-1];const dl=cur-prev;const pc=prev?dl/prev*100:0;
+      h+='<div class="stats"><div><b>'+fmtN(+median(vs).toPrecision(4))+'</b><span>медиана</span></div><div><b>'+fmtN(Math.min(...vs))+'</b><span>минимум</span></div><div><b>'+fmtN(Math.max(...vs))+'</b><span>максимум</span></div><div><b style="color:'+(dl>0?'var(--crit)':dl<0?'#3d7be0':'inherit')+'">'+(dl>0?'+':'')+fmtN(+dl.toPrecision(3))+'</b>'+(prev?'<small style="color:'+(dl>0?'var(--crit)':dl<0?'#3d7be0':'inherit')+'">'+(pc>0?'+':'')+Math.round(pc)+'%</small>':'')+'<span>'+(vital?'за период':'изменение')+'</span></div></div><div class="small muted" style="margin-top:6px;text-align:center">'+vs.length+' '+plural(vs.length,'измерение','измерения','измерений')+'</div>';}
+    if(vital&&pts.length>140)h+='<div class="small muted" style="text-align:center;margin-top:4px">На графике — средние по неделям</div>';
     if(new Set(x.pts.map(q=>(q.unit||'').toLowerCase())).size>1)h+='<p class="note" style="margin:6px 0 0">В разных анализах разные единицы — сравнивайте осторожно.</p>';
     h+='</section>';}
+  if(vital&&!SY.ro){if(key==='V_WEIGHT'||key==='V_BMI')h+='<section class="card"><div class="h"><h2>Новое измерение веса</h2></div><div class="row" style="gap:8px;flex-wrap:nowrap"><input class="inp" type="date" id="vw-d" value="'+ymd(today())+'" style="flex:1;min-width:0"><input class="inp" type="number" inputmode="decimal" id="vw-kg" placeholder="кг" style="width:80px;flex:none"><button type="button" class="btn primary" data-act="addweight" style="flex:none;white-space:nowrap;padding:0 16px;min-height:44px">＋</button></div>'+healthImportBlock()+'</section>';
+    else h+='<button type="button" class="btn block" data-editprof="'+p.id+'">Изменить рост в профиле</button>';}
   if(inf&&(inf.w||inf.hi||inf.lo)){const blk=(t,b,on)=>b?'<div style="margin-top:12px'+(on?';padding:10px 12px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line)':'')+'"><div class="small" style="font-weight:700;margin-bottom:3px">'+t+'</div><div class="small" style="color:var(--txt-2);line-height:1.45">'+esc(b)+'</div></div>':'';
     h+='<section class="card"><div class="h"><h2>О показателе</h2></div><div style="line-height:1.45">'+esc(inf.w)+'</div>'+blk('Если выше нормы',inf.hi,s==='high')+blk('Если ниже нормы',inf.lo,s==='low')+blk('Что делать',inf.act,s==='high'||s==='low')+'</section>';}
   else if(c&&c.desc)h+='<section class="card"><div class="h"><h2>О показателе</h2></div><div style="line-height:1.45">'+esc(c.desc)+'</div></section>';
-  if(x)h+='<section class="card"><div class="h"><h2>История</h2></div><div class="list">'+x.pts.slice().reverse().map(q=>{const s2=statusOf(q,p);const v2=num(q.value);return '<div class="item"'+(q.tid?' data-test="'+q.tid+'"':'')+'><span class="dot '+(s2==='ok'?'ok':s2)+'"></span><div><div class="n">'+(q.date?fmtD(q.date):'—')+'</div><div class="s">'+esc(q.lab||'')+'</div></div><div class="r val '+(s2?'st-'+s2:'')+'">'+esc(v2!=null?fmtN(v2):String(q.value))+' <span class="ref">'+esc(q.unit||'')+'</span></div></div>';}).join('')+'</div></section>';
+  if(x)h+='<section class="card"><div class="h"><h2>История</h2>'+(x.pts.length>60?'<span class="small muted">последние 60 из '+x.pts.length+'</span>':'')+'</div><div class="list">'+x.pts.slice(-60).reverse().map(q=>{const s2=statusOf(q,p);const v2=num(q.value);return '<div class="item"'+(q.tid?' data-test="'+q.tid+'"':'')+'><span class="dot '+(s2==='ok'?'ok':s2)+'"></span><div><div class="n">'+(q.date?fmtD(q.date):'—')+'</div><div class="s">'+esc(q.lab||'')+'</div></div><div class="r val '+(s2?'st-'+s2:'')+'">'+esc(v2!=null?fmtN(v2):String(q.value))+' <span class="ref">'+esc(q.unit||'')+'</span></div></div>';}).join('')+'</div></section>';
   if(!vital)h+='<section class="card"><div class="fld"><label for="ind-rem">Напомнить сдать снова</label><div class="withbtn"><input id="ind-rem" type="date" data-remind="'+esc(key)+'" value="'+esc(rem)+'" class="inp">'+(rem?'<button type="button" class="iconbtn" data-gcal="'+esc(key)+'" aria-label="В календарь" style="height:44px;width:44px">'+ICON.cal+'</button>':'')+'</div></div><div class="row" style="margin-top:8px">'+[3,6,12].map(m=>'<button type="button" class="chip" data-remin="'+m+'" data-k="'+esc(key)+'">через '+m+' мес.</button>').join('')+(rem?'<button type="button" class="chip" data-remclear="'+esc(key)+'">убрать</button>':'')+'</div></section>';
   h+='</div>';openSheet(h,'ind',key);}
 function openNormSet(key){const p=curP();const x=indicatorsOf(p.id).find(y=>y.key===key);if(!x)return;const own=(p.norms||{})[key]||{};const n=normFor(Object.assign({},x.last,{lo:'',hi:''}),Object.assign({},p,{norms:{}}));
@@ -1476,7 +1524,7 @@ function openSettings(){refreshHello();
   openSheet(top('Настройки')+'<div class="stack">'+(profList().length&&((SY.ready&&SY.owner)||!TGA)?'<button type="button" class="btn primary block big-cta" data-act="pdf">'+ICON.dl+'Отчёт для врача (PDF) — '+esc(curP().name)+'</button>':'')+
    diagCard()+shareCard()+protectCard()+medCard()+
    '<section class="card"><div class="h"><h2>Распознавание бланков</h2></div><p class="small" style="margin:0;color:var(--txt-2)">'+(SY.ai?'Подключена нейросеть Gemini — распознаёт точнее.':'Работает встроенное распознавание текста Google Диска. Для большей точности можно подключить ключ Gemini в настройках скрипта (GEMINI_KEY).')+'</p></section>'+
-   (SY.ro?'':'<section class="card"><div class="h"><h2>Импорт истории</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Файл импорта (.json) с анализами за прошлые годы. Повторы пропускаются автоматически.</p><label class="btn block" style="position:relative">'+ICON.up.replace('<svg','<svg width="18" height="18" style="stroke:currentColor;fill:none;stroke-width:2"')+'Выбрать файл импорта<input type="file" accept=".json,application/json" data-import style="position:absolute;inset:0;opacity:0"></label></section>')+
+   (SY.ro?'':'<section class="card"><div class="h"><h2>Импорт истории</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Файл импорта (.json) с анализами за прошлые годы. Повторы пропускаются автоматически.</p><label class="btn block" style="position:relative">'+ICON.up.replace('<svg','<svg width="18" height="18" style="stroke:currentColor;fill:none;stroke-width:2"')+'Выбрать файл импорта<input type="file" accept=".json,application/json" data-import style="position:absolute;inset:0;opacity:0"></label><div style="margin-top:12px">'+healthImportBlock()+'</div></section>')+
    '<section class="card"><div class="h"><h2>Оформление</h2></div><div class="seg" role="group">'+[['auto','Как в системе'],['light','Светлая'],['dark','Тёмная']].map(([k,l])=>'<button type="button" data-theme-set="'+k+'" aria-pressed="'+((localTheme()||'auto')===k)+'">'+l+'</button>').join('')+'</div></section>'+'<p class="note" style="margin:0">Версия '+APP_VER+(TGA?(TGA.initData?' · Telegram ✓':' · Telegram без подписи'):'')+'</p></div>','settings');}
 const fmtAgo=at=>{if(!at)return '';const d=Date.now()-at;if(d<60e3)return 'только что';if(d<3600e3)return Math.round(d/60e3)+' мин назад';const t=new Date(at);return (ymd(t)===ymd(today())?'сегодня':fmtDs(ymd(t)))+', '+t.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});};
 function loadingSheet(t){openSheet(top(t)+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div></section></div>');}
@@ -1531,7 +1579,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
     if(a==='mednew'){openMedNew();return;}
     if(a==='mednames'){openMedNames();return;}
     if(a==='medrename'){doMedRename();return;}
-    if(a==='addweight'){const p=curP();const d=$('#vw-d').value||ymd(today()),kg=num($('#vw-kg').value);if(!kg){toast('Введите вес.');return;}p.weights=(p.weights||[]).filter(w=>w.date!==d);p.weights.push({date:d,kg});persist('p',p.id);openIndicator(sheetId||'V_WEIGHT');render();toast('Вес добавлен.');return;}
+    if(a==='addweight'){const p=curP();const d=$('#vw-d').value||ymd(today()),kg=num($('#vw-kg').value);if(!kg){toast('Введите вес.');return;}wlogAdd(p,d,kg);persist('p',p.id);openIndicator(sheetId||'V_WEIGHT');render();toast('Вес добавлен.');return;}
     if(a==='savedoc'){saveDoc();return;}
     if(a==='deldoc'){const d=draft&&draft.d;if(!d)return;confirmBox({title:'Удалить документ?',text:esc(d.title||'')+' · '+fmtD(d.date)+'. Его можно будет вернуть из корзины.',onOk:()=>{delete st.docs[d.id];persist('d',d.id);draft=null;closeSheet();render();toast('Документ удалён.');}});return;}
     if(a==='addprof')openProfile();
@@ -1540,7 +1588,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
     else if(a==='manual')openReview({items:[],mode:'manual'});
     else if(a==='saveprof'){const p=draft.p;p.name=String(p.name||'').trim();if(!p.name){toast('Введите имя.');return;}
       if(p.dob)p.birth=String(p.dob).slice(0,4);if(p.height!==''&&p.height!=null){p.height=num(p.height);if(p.height&&!p.hDate)p.hDate=ymd(today());}
-      if(num(p.wNow)){p.weights=(p.weights||[]).filter(w=>w.date!==ymd(today()));p.weights.push({date:ymd(today()),kg:num(p.wNow)});}delete p.wNow;st.profiles[p.id]=p;persist('p',p.id);if(draft.isNew)setCur(p.id);draft=null;closeSheet();haptic('ok');}
+      if(num(p.wNow))wlogAdd(p,ymd(today()),num(p.wNow));delete p.wNow;st.profiles[p.id]=p;persist('p',p.id);if(draft.isNew)setCur(p.id);draft=null;closeSheet();haptic('ok');}
     else if(a==='delprof'){const p=st.profiles[sheetId];if(!p)return;const n=testsOf(p.id).length;confirmBox({title:'Удалить профиль «'+p.name+'»?',text:n?'Вместе с ним удалятся '+n+' '+plural(n,'анализ','анализа','анализов')+'.':'Профиль пустой.',protect:n>0,onOk:()=>{testsOf(p.id).forEach(t=>{delete st.tests[t.id];persist('a',t.id);});delete st.profiles[p.id];persist('p',p.id);setCur((profList()[0]||{}).id||'');closeSheet();toast('Профиль удалён.');}});}
     else if(a==='rvadd'){const inp=$('#rv-add');const v=(inp.value||'').trim();if(!v)return;const code=matchCode(v)||(CATALOG.find(c=>c[1].toLowerCase()===v.toLowerCase())||[])[0]||null;draft.items.push({id:uid(),code,name:code?CAT[code].name:v,value:'',unit:code?CAT[code].unit:'',lo:'',hi:'',on:true});renderReview();setTimeout(()=>{const ins=sheetIn.querySelectorAll('[data-rf="value"]');const l=ins[ins.length-1];if(l)l.focus();},60);}
     else if(a==='rvsave')saveReview();
@@ -1562,6 +1610,7 @@ document.addEventListener('input',e=>{const t=e.target;
 document.addEventListener('change',e=>{const t=e.target;
   if(draft&&draft.kind==='doc'&&t.dataset.df){draft.d[t.dataset.df]=t.value;return;}
   if(t.dataset.blank!==undefined&&t.files&&t.files[0]){const f=t.files[0];t.value='';handleBlank(f);return;}
+  if(t.dataset.health!==undefined&&t.files&&t.files[0]){const f=t.files[0];t.value='';importHealth(f);return;}
   if(t.dataset.import!==undefined&&t.files&&t.files[0]){const f=t.files[0];t.value='';importFile(f);return;}
   if(t.dataset.docfile!==undefined&&t.files&&t.files[0]){const f=t.files[0];t.value='';addDocFile(f);return;}
   if(t.dataset.remind){const p=curP();p.remind=p.remind||{};if(t.value)p.remind[t.dataset.remind]=t.value;else delete p.remind[t.dataset.remind];persist('p',p.id);return;}
