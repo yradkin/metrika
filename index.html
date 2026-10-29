@@ -459,7 +459,7 @@ body.dragmode{-webkit-user-select:none;user-select:none}
 .colors{display:flex;gap:8px;flex-wrap:wrap}
 .colors button{width:34px;height:34px;border-radius:50%;border:2px solid transparent;cursor:pointer}
 .colors button[aria-pressed="true"]{border-color:var(--txt)}
-.tabbar{grid-template-columns:repeat(4,1fr)!important}
+.tabbar{grid-template-columns:repeat(5,1fr)!important}
 .sysgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .sys{appearance:none;text-align:left;font:inherit;color:var(--txt);background:var(--surface-2);border:1px solid var(--line);border-radius:16px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;cursor:pointer;min-width:0}
 .sys .sic{font-size:20px;line-height:1}
@@ -497,6 +497,7 @@ body.dragmode{-webkit-user-select:none;user-select:none}
 <nav class="tabbar" id="tabbar" aria-label="Разделы">
   <button type="button" class="tab" data-tab="home" aria-selected="true"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>Сводка</button>
   <button type="button" class="tab" data-tab="tests" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/><path d="M7.5 15h9"/></svg>Анализы</button>
+  <button type="button" class="tab" data-tab="docs" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h4"/></svg>Документы</button>
   <button type="button" class="tab" data-tab="ind" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M5 16l4-5 4 3 6-8"/></svg>Показатели</button>
   <button type="button" class="tab" data-tab="fam" aria-selected="false"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c.9-4 3.9-6 7.5-6s6.6 2 7.5 6"/></svg>Профиль</button>
 </nav>
@@ -514,7 +515,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='2.2';
+const APP_VER='2.3';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -728,7 +729,7 @@ function setBody(k,b){if(k==='cfg'){if(b&&b.cfg)st.cfg=Object.assign({},st.cfg,b
   else if(k[0]==='d'){if(b&&b.d){b.d.files=Array.isArray(b.d.files)?b.d.files:[];st.docs[id]=b.d;}else delete st.docs[id];}
   else{if(b&&b.a){b.a.items=Array.isArray(b.a.items)?b.a.items:[];remap(b.a);st.tests[id]=b.a;}else delete st.tests[id];}}
 function applyDocs(docs,full){if(full){st.profiles={};st.tests={};st.docs={};}Object.keys(docs).forEach(k=>setBody(k,docs[k]));saveLocal();}
-function persist(kind,id){const key=docKey(kind,id);saveLocal();clearTimeout(S.timers[key]);S.timers[key]=setTimeout(()=>flush(key),500);}
+function persist(kind,id){const key=docKey(kind,id);saveLocal();clearTimeout(S.timers[key]);S.timers[key]=setTimeout(()=>flush(key),500);try{scheduleExport();}catch(e){}}
 async function flush(key){
   if(SY.on){if(SY.ro)return;queueKey(key);return;}
   const body=bodyOf(key);
@@ -851,7 +852,7 @@ function confirmBox(o){const el=document.createElement('div');el.className='moda
 async function importFile(file){let j;try{j=JSON.parse(await file.text());}catch(e){toast('Не получилось прочитать файл.');return;}
   if(!j||j.format!=='metrika-import'||!Array.isArray(j.tests||[])){toast('Это не файл импорта «Метрики».');return;}j.tests=j.tests||[];
   let p=curP();if(!p){p={id:uid(),name:(j.profile&&j.profile.name)||'Я',sex:'',birth:'',color:COLORS[0],remind:{},created:Date.now()};st.profiles[p.id]=p;setCur(p.id);}
-  if(j.profile){let ch=false;if(!p.sex&&j.profile.sex){p.sex=j.profile.sex;ch=true;}if(!p.birth&&j.profile.birth){p.birth=String(j.profile.birth).slice(0,4);ch=true;}if(ch)persist('p',p.id);}
+  if(j.profile){let ch=false;if(!p.sex&&j.profile.sex){p.sex=j.profile.sex;ch=true;}if(!p.birth&&j.profile.birth){p.birth=String(j.profile.birth).slice(0,4);ch=true;}if(!p.dob&&/^\d{4}-\d{2}-\d{2}$/.test(j.profile.birth||'')){p.dob=j.profile.birth;ch=true;}if(ch)persist('p',p.id);}
   let added=0,skipped=0,rows=0;
   j.tests.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).forEach(t=>{if(!t||!/^\d{4}-\d{2}-\d{2}$/.test(t.date||'')||!Array.isArray(t.items)||!t.items.length){skipped++;return;}
     const items=t.items.map(x=>({id:uid(),code:x.code||null,grp:x.code?undefined:(x.grp||undefined),name:String(x.name||''),value:x.value,unit:x.unit||'',lo:x.lo==null?'':x.lo,hi:x.hi==null?'':x.hi,ref:x.ref||''})).filter(x=>x.name&&x.value!==''&&x.value!=null);
@@ -890,7 +891,7 @@ function render(){
   document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===tab)));
   if(SY.state==='pending'||SY.state==='blocked'){view.innerHTML=accessHTML();return;}
   if(!profList().length){view.innerHTML=welcomeHTML();return;}
-  view.innerHTML=(tab==='home'?homeHTML():tab==='tests'?testsHTML():tab==='ind'?indHTML():famHTML());
+  view.innerHTML=(tab==='home'?homeHTML():tab==='tests'?testsHTML():tab==='docs'?docsHTML():tab==='ind'?indHTML():famHTML());
 }
 function accessHTML(){if(PERSONAL)return '<section class="hero"><div class="names">'+APP_NAME+'</div><div class="when">Это личное приложение. Доступ к нему есть только у владельца.</div></section>';
   return '<section class="hero"><div class="names">'+APP_NAME+'</div><div class="when">'+(SY.state==='blocked'?'Доступ к этому приложению закрыт.':'Запрос на доступ отправлен. Как только его подтвердят, здесь появятся данные.')+'</div>'+(SY.state==='pending'?'<div class="spin" style="margin-top:16px"></div>':'')+'</section><p class="note">Страница обновится сама. Можно закрыть приложение и открыть позже.</p>';}
@@ -915,7 +916,7 @@ function homeHTML(){const p=curP();const ts=testsOf(p.id);const inds=indicatorsO
   return h;}
 function itemRow(it,p){const s=statusOf(it,p),n=normFor(it,p);return '<div class="item" data-ind="'+esc(itemKey(it))+'"><span class="dot '+(s==='ok'?'ok':s)+'"></span><div style="min-width:0"><div class="n">'+esc(it.code&&CAT[it.code]?CAT[it.code].name:it.name)+'</div><div class="s">'+(refTxt(n)?'норма '+refTxt(n)+(n.src==='typ'?'*':''):'')+(s&&s!=='ok'?' · '+stLabel[s]:'')+'</div></div><div class="r val '+(s?'st-'+s:'')+'">'+esc(num(it.value)!=null?fmtN(num(it.value)):it.value)+' <span class="ref">'+esc(it.unit||'')+'</span></div></div>';}
 function subSeg(){const nd=docsOf(curP().id).length;return '<div class="seg" role="group" style="margin-bottom:-2px"><button type="button" data-sub="tests" aria-pressed="'+(sub==='tests')+'">Анализы</button><button type="button" data-sub="docs" aria-pressed="'+(sub==='docs')+'">Обследования'+(nd?' · '+nd:'')+'</button></div>';}
-function testsHTML(){if(sub==='docs')return subSeg()+docsHTML();return subSeg()+testsHTML0();}
+function testsHTML(){return testsHTML0();}
 function testsHTML0(){const p=curP();const ts=testsOf(p.id);
   let h='<div class="row" style="justify-content:space-between">'+profChip()+(SY.ro?'':'<button type="button" class="btn primary sm" data-act="addtest">'+ICON.plus.replace('<svg','<svg width="16" height="16" style="stroke:currentColor;fill:none;stroke-width:2.4"')+'Анализ</button>')+'</div>';
   if(!ts.length)return h+'<section class="card"><div class="empty">Пока пусто. Нажмите «Анализ», чтобы загрузить бланк.</div></section>';
@@ -1149,7 +1150,7 @@ const DK=Object.fromEntries(DOC_KINDS);
 const docsOf=pid=>Object.values(st.docs||{}).filter(d=>d.pid===pid).sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.created||0)-(a.created||0));
 const clip=(t,n)=>{t=String(t||'').replace(/\s+/g,' ').trim();return t.length>n?t.slice(0,n-1)+'…':t;};
 function docsHTML(){const p=curP();const all=docsOf(p.id);const kinds=DOC_KINDS.filter(([k])=>all.some(d=>(d.kind||'other')===k));
-  let h='<div class="row" style="justify-content:space-between">'+(SY.ro?'<span></span>':'<button type="button" class="btn primary sm" data-act="adddoc">'+ICON.plus.replace('<svg','<svg width="16" height="16" style="stroke:currentColor;fill:none;stroke-width:2.4"')+'Документ</button>')+'<span class="small muted">'+all.length+' '+plural(all.length,'документ','документа','документов')+'</span></div>';
+  let h='<div class="yr" style="margin:0 2px -2px">Обследования и заключения врачей</div><div class="row" style="justify-content:space-between">'+(SY.ro?'<span></span>':'<button type="button" class="btn primary sm" data-act="adddoc">'+ICON.plus.replace('<svg','<svg width="16" height="16" style="stroke:currentColor;fill:none;stroke-width:2.4"')+'Документ</button>')+'<span class="small muted">'+all.length+' '+plural(all.length,'документ','документа','документов')+'</span></div>';
   if(kinds.length>1)h+='<div class="seg" role="group"><button type="button" data-dk="" aria-pressed="'+(!docKind)+'">Все</button>'+kinds.map(([k,l])=>'<button type="button" data-dk="'+k+'" aria-pressed="'+(docKind===k)+'">'+l+'</button>').join('')+'</div>';
   const list=all.filter(d=>!docKind||(d.kind||'other')===docKind);
   if(!list.length)return h+'<section class="card"><div class="empty">Здесь будут заключения врачей, УЗИ, МРТ, ЭКГ и выписки. Нажмите «Документ», чтобы добавить фото или PDF.</div></section>';
@@ -1185,7 +1186,7 @@ async function addDocFile(file){const d=draft&&draft.kind==='doc'?draft.d:null;i
     if(empty){try{const x=await api('doc_read',{fid:r.file.id});if(x.mode==='ai'&&x.doc){const g=x.doc;['title','spec','doctor','clinic','conclusion','recs','text'].forEach(k=>{if(!d[k]&&g[k])d[k]=String(g[k]);});if(/^\d{4}-\d{2}-\d{2}$/.test(g.date||''))d.date=g.date;if(DK[g.kind])d.kind=g.kind;}else if(x.text&&!d.text)d.text=x.text;}catch(e){}}
     if(draft&&draft.d===d)renderDocForm();toast(empty?'Файл прикреплён. Проверьте поля.':'Файл прикреплён.');}catch(e){toast('Не получилось загрузить файл.');}}
 function saveDoc(){const d=draft.d;if(!d.title&&!d.conclusion&&!d.files.length){toast('Добавьте название, заключение или файл.');return;}
-  d.title=String(d.title||'').trim()||DK[d.kind]||'Документ';st.docs[d.id]=d;persist('d',d.id);autoName('d',d.id);draft=null;closeSheet();tab='tests';sub='docs';render();haptic('ok');toast('Документ сохранён.');}
+  d.title=String(d.title||'').trim()||DK[d.kind]||'Документ';st.docs[d.id]=d;persist('d',d.id);autoName('d',d.id);draft=null;closeSheet();tab='docs';document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===tab)));render();haptic('ok');toast('Документ сохранён.');}
 function openTest(id){const t=st.tests[id];if(!t)return;const p=st.profiles[t.pid]||curP();
   let h=top(fmtD(t.date),SY.ro?'':'<button type="button" class="iconbtn" data-edittest="'+id+'" aria-label="Изменить"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>')+'<div class="stack"><div class="small muted">'+esc(p?p.name:'')+(t.lab?' · '+esc(t.lab):'')+'</div>';
   if(t.file)h+='<div class="row"><button type="button" class="btn sm" data-viewfile="'+esc(t.file.id)+'">'+ICON.doc.replace('<svg','<svg width="16" height="16" style="stroke:currentColor;fill:none;stroke-width:2"')+'Бланк</button></div>';
@@ -1491,6 +1492,44 @@ async function medImport(kind,f){const file={id:f.id,name:f.name,mime:f.mime,med
     res.file=file;res.sec=Math.round((Date.now()-t0)/1000);openReview(res);}catch(e){closeSheet();toast('Не получилось прочитать файл.');}}
 function medCard(){if(!(SY.ready&&SY.owner))return '';return '<section class="card"><div class="h"><h2>Папка «Медицина документы»</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Новые бланки и заключения сохраняются туда с понятными именами.</p><div class="row" style="gap:8px"><button type="button" class="btn sm" data-act="mednew">Проверить новые файлы</button><button type="button" class="btn sm" data-act="mednames">Упорядочить названия</button></div></section>';}
 
+const RESTORE_LINES=["Метрика — правила восстановления", "", "Это памятка на случай, если что-то пропадёт: приложение, сервер, бот или таблица.", "Главное: данные живут на вашем Google Диске, а не в приложении. Приложение — только «окно» к ним.", "", "1. Из чего состоит «Метрика»", "", "Часть · Где находится · Что в ней", "Бот · Telegram, @mymetricabot (настройки — @BotFather) · Кнопка «Открыть» запускает приложение", "Приложение · GitHub: github.com/yradkin/metrika, страница yradkin.github.io/metrika · Один файл index.html — интерфейс, без данных", "Сервер · script.google.com, проект «Метрика сервер» (Apps Script) · Принимает и отдаёт данные, распознаёт бланки", "Данные · Google Диск → папка «Метрика» → таблица «Метрика — данные» · Профиль, все анализы, обследования, вес, нормы, напоминания", "Файлы · Google Диск → папка «Медицина документы» · Оригиналы бланков, заключений, УЗИ (PDF и фото)", "Резервные копии · Google Диск → «Метрика — резервные копии» · Каждую ночь полный снимок данных в JSON", "Читаемая таблица · Google Диск → «Метрика — все данные (читаемая таблица)» · Всё в человеческом виде, со ссылками на файлы", "Копия приложения · Google Диск → «Метрика — копия приложения (index.html)» · Обновляется каждую ночь с GitHub", "Копии файлов · Mac → Загрузки → metrika-telegram · index.html, текст сервера, тексты бота, аватар, обложка, файл импорта", "", "2. Если пропало приложение (GitHub)", "", "1. Возьмите index.html: Mac → Загрузки → metrika-telegram, или Google Диск → «Метрика — копия приложения (index.html)» (скачать и переименовать в index.html).", "2. GitHub → New repository → имя metrika → Public → Create.", "3. Add file → Upload files → index.html → Commit changes.", "4. Settings → Pages → Branch: main, папка / (root) → Save. Через минуту страница снова работает по тому же адресу.", "5. Если адрес изменился — @BotFather → /mybots → бот → Bot Settings → Configure Mini App и Menu Button → новый адрес.", "", "Данные при этом не теряются: они на Диске.", "", "3. Если пропал сервер (проект Apps Script)", "", "1. Откройте script.new, назовите проект «Метрика сервер».", "2. Вставьте код из файла «СЕРВЕР-метрика-vN-вставить-в-Apps-Script.txt» (самая новая версия; Загрузки → metrika-telegram).", "3. Настройки проекта → Свойства скрипта. Чтобы подключиться к старым данным, а не создать пустые, добавьте:", "   - BOT_TOKEN — токен бота из @BotFather → /mybots → API Token;", "   - GEMINI_KEY — ключ из aistudio.google.com (необязательно);", "   - SHEET_ID, FOLDER_ID, BACKUP_FOLDER_ID, READABLE_ID — возьмите из читаемой таблицы, лист «Технические данные»;", "   - MED_FOLDER_ID — id папки «Медицина документы» (часть ссылки после /folders/).", "4. Выполните функцию setup и разрешите доступ.", "5. Развертывание → Новое развертывание → Веб-приложение → выполнять от «Я», доступ «Все» → скопируйте адрес …/exec.", "6. В index.html найдите строку const SYNC_URL='…', замените адрес на новый и загрузите файл на GitHub (как в пункте 2). Или попросите Claude сделать это.", "7. Владелец определяется по вашему Telegram: откройте приложение первым. Если владельцем записан кто-то другой — выполните в скрипте функцию resetAccess.", "", "4. Если испортились или удалились данные", "", "- Отдельный анализ или документ удалён — в приложении: ⚙️ → «Корзина» → «Вернуть».", "- Что-то изменилось не так — ⚙️ → «Журнал изменений» (кто, что, когда).", "- Нужно откатить всё — ⚙️ → «Резервные копии» → выбрать дату → «Восстановить».", "- Таблица «Метрика — данные» удалена — восстановите её из корзины Google Диска (30 дней) или создайте сервер заново (п. 3) и восстановите из папки «Метрика — резервные копии».", "- Всё пропало, кроме читаемой таблицы и файлов — данные есть в читаемой таблице (листы «Анализы», «Обследования», «Вес»), а оригиналы — в «Медицина документы». Из них Claude соберёт файл импорта.", "", "5. Если пропал бот", "", "1. @BotFather → /newbot (имя «Метрика»), задайте описание и аватар (тексты и картинки — Загрузки → metrika-telegram).", "2. Новый токен → свойство BOT_TOKEN в Apps Script.", "3. Bot Settings → Configure Mini App и Menu Button → адрес приложения.", "", "Ваш Telegram-аккаунт тот же, поэтому вы останетесь владельцем.", "", "6. Как устроены данные (для технической помощи)", "", "- Таблица «Метрика — данные», лист data: столбцы key, json, updatedAt, by.", "  - p_<id> — профиль: имя, пол, дата рождения (dob), рост (height), вес (wlog: «ГГММДД:кг;…»), свои нормы (norms), напоминания (remind).", "  - a_<id> — анализ: дата, лаборатория, файл бланка, список показателей (code, name, value, unit, lo, hi).", "  - d_<id> — обследование: дата, вид, название, врач, клиника, заключение, рекомендации, файлы.", "  - Листы history и log — прошлые версии и журнал изменений.", "- Резервная копия — JSON со всеми ключами и телами; восстанавливается из приложения.", "- Файл импорта (metrika-import) — JSON с массивами tests и docs; загружается через ⚙️ → «Импорт истории».", "", "7. Что регулярно делать", "", "- Раз в несколько месяцев открывайте читаемую таблицу и проверяйте, что она обновляется (лист «Технические данные», строка «Обновлено»).", "- После крупных изменений приложения новые версии index.html и сервера сохраняются в Загрузки → metrika-telegram.", ""];
+/* ---------- Читаемая Google-таблица со всеми данными ---------- */
+const driveLink=(f,t)=>f&&f.id?'=HYPERLINK("https://drive.google.com/file/d/'+f.id+'/view","'+String(t||'открыть').replace(/"/g,"'")+'")':'';
+const grpName=g=>(GROUPS.find(x=>x[0]===g)||[0,'Другое'])[1];
+function buildReadable(p){const ts=testsOf(p.id).slice();const stTxt={high:'выше нормы',low:'ниже нормы',ok:'в норме'};const stCol={high:'#c03550',low:'#2f6fd0'};
+  const A=[['Дата','Лаборатория','Раздел','Показатель','Значение','Ед.','Норма от','Норма до','Статус','Бланк','Источник']],Ac=[null];
+  ts.forEach(t=>{(t.items||[]).forEach(it=>{const g=it.code&&CAT[it.code]?CAT[it.code].grp:(it.grp||'other');const n=normFor(it,p);const s=statusOf(it,p);
+    A.push([t.date||'',t.lab||'',grpName(g),it.code&&CAT[it.code]?CAT[it.code].name:it.name,it.value,it.unit||'',n.lo==null?'':n.lo,n.hi==null?'':n.hi,stTxt[s]||'',driveLink(t.file,'бланк'),t.source||t.note||'']);Ac.push(stCol[s]||null);});});
+  const inds=indicatorsOf(p.id);const dates=[...new Set(ts.map(t=>t.date).filter(Boolean))].sort();
+  const D=[['Раздел','Показатель','Ед.'].concat(dates)];
+  GROUPS.forEach(([g,gn])=>{inds.filter(x=>x.grp===g).sort((a,b)=>a.name.localeCompare(b.name,'ru')).forEach(x=>{const row=[gn,x.name,x.last.unit||''];const m={};x.pts.forEach(q=>{m[q.date]=q.value;});dates.forEach(d=>row.push(m[d]!=null?m[d]:''));D.push(row);});});
+  const O=[['Дата','Вид','Название','Специальность','Врач','Клиника','Заключение','Рекомендации','Заметка','Файл 1','Файл 2','Файл 3']];
+  docsOf(p.id).forEach(d=>{const fs=d.files||[];O.push([d.date||'',DK[d.kind]||'',d.title||'',d.spec||'',d.doctor||'',d.clinic||'',d.conclusion||'',d.recs||'',d.note||'',driveLink(fs[0],fs[0]&&fs[0].name),driveLink(fs[1],fs[1]&&fs[1].name),driveLink(fs[2],fs[2]&&fs[2].name)]);});
+  const h=num(p.height);const W=[['Дата','Вес, кг','ИМТ']];wlogGet(p).slice().reverse().forEach(w=>W.push([w.date,w.kg,h?+(w.kg/Math.pow(h/100,2)).toFixed(1):'']));
+  const P=[['Поле','Значение'],['Имя',p.name||''],['Пол',p.sex==='m'?'мужской':p.sex==='f'?'женский':''],['Дата рождения',p.dob||p.birth||''],['Рост, см',p.height||'']];
+  Object.entries(p.norms||{}).forEach(([k,v])=>P.push(['Своя норма: '+(CAT[k]?CAT[k].name:k),(v.lo!==''?'от '+v.lo:'')+(v.hi!==''?' до '+v.hi:'')]));
+  Object.entries(p.remind||{}).forEach(([k,v])=>{const ck=/^ck:/.test(k)?CHECK.find(c=>'ck:'+c.id===k):null;P.push(['Напоминание: '+(ck?ck.t:CAT[k]?CAT[k].name:k),v]);});
+  const C=[['Что пройти','Последний раз','Следующий срок','Состояние','Почему']];const ckT={over:'просрочено',never:'ещё не делали',soon:'скоро',ok:'в порядке'};
+  checkupOf(p).forEach(r=>C.push([r.t,r.last||'',r.due||'',ckT[r.st],r.why]));
+  return [
+    {name:'Как восстановить',rows:RESTORE_LINES.map(l=>[l]),header:false,widths:[900],wrap:true},
+    {name:'Анализы',rows:A,colors:Ac,widths:[90,110,150,260,90,80,80,80,100,80,260],freezeCols:0},
+    {name:'Динамика',rows:D,widths:[150,260,80],freezeCols:2},
+    {name:'Обследования',rows:O,widths:[90,110,220,140,160,160,420,360,200,160,160,160],wrap:true},
+    {name:'Вес',rows:W,widths:[100,90,80]},
+    {name:'Профиль',rows:P,widths:[320,300]},
+    {name:'План обследований',rows:C,widths:[300,110,120,120,420],wrap:true}];}
+let expT=0,expBusy=false;
+function scheduleExport(){if(!(TGA&&SY.ready&&!SY.ro))return;clearTimeout(expT);expT=setTimeout(()=>exportReadable(false),45000);}
+async function exportReadable(manual){if(!(SY.ready&&!SY.ro)||expBusy)return;const p=curP();if(!p)return;expBusy=true;
+  try{const r=await api('readable_put',{sheets:buildReadable(p)});lsSet('health-readable',JSON.stringify({url:r.url,at:Date.now()}));if(manual){toast('Таблица обновлена.');refreshReadableUI();}}
+  catch(e){if(manual)toast(e.code==='bad_op'?'Обновите сервер до v5.':'Не получилось обновить таблицу.');}finally{expBusy=false;}}
+function readableInfo(){try{return JSON.parse(lsGet('health-readable')||'null');}catch(e){return null;}}
+function readableCard(){if(!(SY.ready&&!SY.ro))return '';const r=readableInfo();
+  return '<section class="card" id="readCard"><div class="h"><h2>Таблица и восстановление</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Все анализы, обследования, вес и профиль копируются в обычную Google-таблицу на Диске со ссылками на файлы. Там же — лист «Как восстановить». Обновляется сама после изменений.</p>'+
+   '<div class="small muted" style="margin-bottom:8px">'+(r&&r.at?'Обновлено '+fmtAgo(r.at):'Ещё не создавалась')+'</div><div class="row" style="gap:8px">'+(r&&r.url?'<button type="button" class="btn sm primary" data-openurl="'+esc(r.url)+'">Открыть таблицу</button>':'')+'<button type="button" class="btn sm" data-act="exportnow">'+(r&&r.url?'Обновить сейчас':'Создать таблицу')+'</button></div></section>';}
+function refreshReadableUI(){const el=$('#readCard');if(el)el.outerHTML=readableCard();}
+
 /* ---------- Отчёт для врача (PDF) ---------- */
 function buildReport(p){const inds=indicatorsOf(p.id),ts=testsOf(p.id);const e=esc;const now=new Date();
   let h='<html><head><meta charset="utf-8"><style>body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#122026;line-height:1.35}h1{font-family:Georgia,serif;font-weight:normal;font-size:22pt;margin:0;color:#0b5357}h2{font-size:12.5pt;margin:20px 0 6px;padding-bottom:4px;border-bottom:2px solid #bfe3df;color:#0b5357}.m{color:#5a6d72}.s{font-size:8.5pt;color:#5a6d72}table{width:100%;border-collapse:collapse;margin:4px 0 8px}th{text-align:left;font-size:8.5pt;color:#5a6d72;border-bottom:1.5px solid #bcd7d4;padding:4px 5px}td{vertical-align:top;border-bottom:1px solid #e3efee;padding:4px 5px}.lo{color:#2f6fd0;font-weight:bold}.hi{color:#c03550;font-weight:bold}.num{white-space:nowrap}</style></head><body>';
@@ -1526,7 +1565,7 @@ function refreshShareUI(){const el=$('#shareCard');if(el)el.outerHTML=shareCard(
 function protectCard(){if(!(SY.ready&&SY.owner))return '';return '<section class="card"><div class="h"><h2>Защита данных</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Все прошлые версии и удалённое хранятся. Каждую ночь делается резервная копия.</p><div class="row"><button type="button" class="btn sm" data-act="changelog">Журнал изменений</button><button type="button" class="btn sm" data-act="trash">Корзина</button><button type="button" class="btn sm" data-act="backups">Резервные копии</button></div></section>';}
 function openSettings(){refreshHello();
   openSheet(top('Настройки')+'<div class="stack">'+(profList().length&&((SY.ready&&SY.owner)||!TGA)?'<button type="button" class="btn primary block big-cta" data-act="pdf">'+ICON.dl+'Отчёт для врача (PDF) — '+esc(curP().name)+'</button>':'')+
-   diagCard()+shareCard()+protectCard()+medCard()+
+   diagCard()+shareCard()+readableCard()+protectCard()+medCard()+
    '<section class="card"><div class="h"><h2>Распознавание бланков</h2></div><p class="small" style="margin:0;color:var(--txt-2)">'+(SY.ai?'Подключена нейросеть Gemini — распознаёт точнее.':'Работает встроенное распознавание текста Google Диска. Для большей точности можно подключить ключ Gemini в настройках скрипта (GEMINI_KEY).')+'</p></section>'+
    (SY.ro?'':'<section class="card"><div class="h"><h2>Импорт истории</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Файл импорта (.json) с анализами за прошлые годы. Повторы пропускаются автоматически.</p><label class="btn block" style="position:relative">'+ICON.up.replace('<svg','<svg width="18" height="18" style="stroke:currentColor;fill:none;stroke-width:2"')+'Выбрать файл импорта<input type="file" accept=".json,application/json" data-import style="position:absolute;inset:0;opacity:0"></label><div style="margin-top:12px">'+healthImportBlock()+'</div></section>')+
    '<section class="card"><div class="h"><h2>Оформление</h2></div><div class="seg" role="group">'+[['auto','Как в системе'],['light','Светлая'],['dark','Тёмная']].map(([k,l])=>'<button type="button" data-theme-set="'+k+'" aria-pressed="'+((localTheme()||'auto')===k)+'">'+l+'</button>').join('')+'</div></section>'+'<p class="note" style="margin:0">Версия '+APP_VER+(TGA?(TGA.initData?' · Telegram ✓':' · Telegram без подписи'):'')+'</p></div>','settings');}
@@ -1567,6 +1606,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
     if(k==='auto'){if(TGA)document.documentElement.setAttribute('data-theme',TGA.colorScheme==='dark'?'dark':'light');else document.documentElement.removeAttribute('data-theme');}else document.documentElement.setAttribute('data-theme',k);tgColors();sheetIn.querySelectorAll('[data-theme-set]').forEach(b=>b.setAttribute('aria-pressed',String(b===el)));return;}
   if((el=t.closest('[data-sub]'))){sub=el.dataset.sub;render();return;}
   if((el=t.closest('[data-sys]'))){openSystem(el.dataset.sys);return;}
+  if((el=t.closest('[data-openurl]'))){openUrl(el.dataset.openurl);return;}
   if((el=t.closest('[data-medas]'))){const f=(SY.medFresh||[])[+el.dataset.i];if(f)medImport(el.dataset.medas,f);return;}
   if((el=t.closest('[data-ckrem]'))){const p=curP();p.remind=p.remind||{};p.remind[el.dataset.ckrem]=el.dataset.d;persist('p',p.id);openCheck(el.dataset.ckrem.slice(3));render();toast('Напоминание на '+fmtD(el.dataset.d)+'.');return;}
   if((el=t.closest('[data-ck]'))){openCheck(el.dataset.ck);return;}
@@ -1581,6 +1621,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
     if(a==='adddoc'){editDoc(null);return;}
     if(a==='ckall'){openCheckups();return;}
     if(a==='mednew'){openMedNew();return;}
+    if(a==='exportnow'){toast('Обновляю таблицу…');exportReadable(true);return;}
     if(a==='mednames'){openMedNames();return;}
     if(a==='medrename'){doMedRename();return;}
     if(a==='addweight'){const p=curP();const d=$('#vw-d').value||ymd(today()),kg=num($('#vw-kg').value);if(!kg){toast('Введите вес.');return;}wlogAdd(p,d,kg);persist('p',p.id);openIndicator(sheetId||'V_WEIGHT');render();toast('Вес добавлен.');return;}
