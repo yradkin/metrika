@@ -594,7 +594,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='2.6';
+const APP_VER='2.7';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -2432,7 +2432,6 @@ function renderGoals(){const p=curP();const g=FD.goal;const G=foodGoal(Object.as
 
 /* ---------- штрихкод: камера (BarcodeDetector или ZXing), фото, ручной ввод ---------- */
 let ZXP=null;function loadZXing(){if(ZXP)return ZXP;ZXP=new Promise((res,rej)=>{if(window.ZXing){res(window.ZXing);return;}const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=()=>window.ZXing?res(window.ZXing):rej(new Error('zxing'));s.onerror=()=>{ZXP=null;rej(new Error('zxing'));};document.head.appendChild(s);});return ZXP;}
-function zxReader(Z){const hints=new Map();hints.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.EAN_13,Z.BarcodeFormat.EAN_8,Z.BarcodeFormat.UPC_A,Z.BarcodeFormat.UPC_E,Z.BarcodeFormat.CODE_128]);hints.set(Z.DecodeHintType.TRY_HARDER,true);return new Z.BrowserMultiFormatReader(hints,250);}
 async function nativeDetector(){try{if(!('BarcodeDetector' in window))return null;const f=await BarcodeDetector.getSupportedFormats();const want=['ean_13','ean_8','upc_a','upc_e','code_128'].filter(x=>f.includes(x));return want.length?new BarcodeDetector({formats:want}):null;}catch(e){return null;}}
 let SCAN=null;
 function closeScan(){if(!SCAN)return;SCAN.done=true;try{SCAN.reader&&SCAN.reader.reset();}catch(e){}try{SCAN.stream&&SCAN.stream.getTracks().forEach(t=>t.stop());}catch(e){}SCAN.el.remove();SCAN=null;}
@@ -2442,18 +2441,42 @@ async function openScan(){closeScan();const el=document.createElement('div');el.
   document.body.appendChild(el);SCAN={el,done:false};const S0=SCAN;const msg=t=>{const m=el.querySelector('#smsg');if(m)m.textContent=t;};
   el.addEventListener('click',e=>{if(e.target.closest('[data-sx]')){closeScan();return;}if(e.target.closest('[data-sgo]')){const v=el.querySelector('#scode').value;closeScan();lookupBarcode(v);}});
   el.querySelector('#scode').addEventListener('keydown',e=>{if(e.key==='Enter'){const v=e.target.value;closeScan();lookupBarcode(v);}});
-  el.querySelector('[data-sphoto]').addEventListener('change',async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;msg('Читаю фото…');const c=await decodeImage(f);if(c){closeScan();lookupBarcode(c);}else msg('Не получилось прочитать. Снимите ближе и ровнее или введите цифры.');});
+  el.querySelector('[data-sphoto]').addEventListener('change',async e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(!f)return;S0.paused=true;msg('Читаю фото…');let c=await decodeImage(f);
+    if(!c&&SY.ai){msg('Прошу нейросеть прочитать цифры…');c=await decodeByAI(f);if(c&&!eanOk(c)){const i=el.querySelector('#scode');if(i)i.value=c;msg('Проверьте цифры и нажмите «Найти».');S0.paused=false;return;}}
+    if(c){closeScan();lookupBarcode(c);}else{S0.paused=false;msg('Не получилось прочитать. Снимите ближе, чтобы штрихкод занял полкадра, или введите цифры.');}});
   const found=c=>{if(S0.done)return;haptic('ok');closeScan();lookupBarcode(c);};
   if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){msg('Камера здесь недоступна — сфотографируйте штрихкод или введите цифры.');return;}
-  let stream;try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});}catch(e){msg('Нет доступа к камере. Разрешите доступ или сфотографируйте штрихкод.');return;}
+  let stream;try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});}catch(e){msg('Нет доступа к камере. Разрешите доступ или сфотографируйте штрихкод.');return;}
   if(S0.done){stream.getTracks().forEach(t=>t.stop());return;}S0.stream=stream;const v=el.querySelector('video');v.srcObject=stream;try{await v.play();}catch(e){}
   const det=await nativeDetector();
   if(det){msg('Ищу штрихкод…');const loop=async()=>{if(S0.done)return;try{const r=await det.detect(v);if(r&&r[0]&&r[0].rawValue){found(r[0].rawValue);return;}}catch(e){}setTimeout(loop,180);};loop();return;}
-  try{const Z=await loadZXing();if(S0.done)return;msg('Ищу штрихкод…');const rd=zxReader(Z);S0.reader=rd;rd.decodeFromStream(stream,v,(res)=>{if(res)found(res.getText?res.getText():res.text);}).catch(()=>{});}
-  catch(e){msg('Не загрузился сканер — сфотографируйте штрихкод или введите цифры.');}}
+  let Z;try{Z=await loadZXing();}catch(e){msg('Не загрузился сканер — сфотографируйте штрихкод или введите цифры.');return;}if(S0.done)return;
+  msg('Ищу штрихкод… Держите ровно, чтобы он занял рамку.');let n=0,last='',same=0;
+  const crops=[[.1,.3,.8,.4,1280],[0,.2,1,.6,1280],[.2,.35,.6,.3,900],[0,0,1,1,1000]];
+  const loop=()=>{if(S0.done)return;if(S0.paused||!v.videoWidth){setTimeout(loop,250);return;}
+    const c=zxCanvas(Z,cropTo(v,v.videoWidth,v.videoHeight,...crops[n++%crops.length]));
+    if(c){if(/^\d+$/.test(c)&&!eanOk(c)){setTimeout(loop,60);return;}if(c===last)same++;else{last=c;same=1;}if(same>=1){found(c);return;}}
+    setTimeout(loop,90);};loop();}
+/* ZXing напрямую по кадру на canvas: так надёжнее в iPhone, чем видео-режим библиотеки */
+function zxCore(Z){if(zxCore.r)return zxCore.r;const h=new Map();h.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.EAN_13,Z.BarcodeFormat.EAN_8,Z.BarcodeFormat.UPC_A,Z.BarcodeFormat.UPC_E,Z.BarcodeFormat.CODE_128,Z.BarcodeFormat.QR_CODE]);h.set(Z.DecodeHintType.TRY_HARDER,true);
+  const r=new Z.MultiFormatReader();r.setHints(h);zxCore.r=r;return r;}
+function zxCanvas(Z,cv){const r=zxCore(Z);let src;try{src=new Z.HTMLCanvasElementLuminanceSource(cv);}catch(e){return null;}
+  for(const B of [Z.HybridBinarizer,Z.GlobalHistogramBinarizer]){try{const x=r.decodeWithState(new Z.BinaryBitmap(new B(src)));if(x)return x.getText();}catch(e){}finally{try{r.reset();}catch(e){}}}return null;}
+/* вырезать часть кадра (доли от размеров) и уменьшить до ширины w */
+function cropTo(img,iw,ih,fx,fy,fw,fh,w){const sw=iw*fw,sh=ih*fh;const k=Math.min(1,w/sw);const cv=document.createElement('canvas');cv.width=Math.max(1,Math.round(sw*k));cv.height=Math.max(1,Math.round(sh*k));
+  const x=cv.getContext('2d',{willReadFrequently:true});x.drawImage(img,iw*fx,ih*fy,sw,sh,0,0,cv.width,cv.height);return cv;}
+const eanOk=c=>{if(!/^\d{8}$|^\d{12,13}$/.test(c))return true;const d=c.padStart(13,'0').split('').map(Number);const s=d.slice(0,12).reduce((a,v,i)=>a+v*(i%2?3:1),0);return (10-s%10)%10===d[12];};
 async function decodeImage(file){const det=await nativeDetector();
   if(det){try{const bm=await createImageBitmap(file);const r=await det.detect(bm);if(r&&r[0])return r[0].rawValue;}catch(e){}}
-  try{const Z=await loadZXing();const url=await shrinkImg(file,1600,.92);const rd=zxReader(Z);const r=await rd.decodeFromImageUrl(url);return r?(r.getText?r.getText():r.text):null;}catch(e){return null;}}
+  let Z;try{Z=await loadZXing();}catch(e){return null;}
+  const url=URL.createObjectURL(file);const img=await new Promise(res=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src=url;});URL.revokeObjectURL(url);if(!img)return null;
+  const iw=img.naturalWidth,ih=img.naturalHeight;
+  // от общего к частному: весь кадр, центр, половинки — в разных масштабах
+  const tries=[[0,0,1,1,1200],[.2,.3,.6,.4,1200],[.3,.38,.4,.24,1200],[0,.25,1,.5,1600],[.1,.1,.8,.8,1400],[.35,.4,.3,.2,900],[0,0,1,1,800]];
+  const T0=Date.now();for(const t of tries){const c=zxCanvas(Z,cropTo(img,iw,ih,...t));if(c)return c;if(Date.now()-T0>9000)break;await new Promise(r=>setTimeout(r,0));}
+  return null;}
+/* штрихкод не прочитался — просим нейросеть прочитать цифры под ним */
+async function decodeByAI(file){if(!SY.ready||!SY.ai)return null;try{const data=await shrinkImg(file,1600,.9);const r=await api('food_read',{data,mode:'barcode'});const c=String((r.food||{}).code||'').replace(/\D/g,'');return c.length>=8?c:null;}catch(e){return null;}}
 async function lookupBarcode(code){code=String(code||'').replace(/\D/g,'');if(code.length<6){toast('Не похоже на штрихкод.');return;}
   await fdbLoad();const mine=myFoods().find(f=>f.code===code);if(mine){if(FD.libMode){editFood(mine.id);return;}openAmount({src:srcOf(mine)});return;}
   if(FDB.rows&&FDB.byCode[code]!=null){const f=saveOffFood(fdbSrc(FDB.byCode[code]).off);if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}
