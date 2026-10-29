@@ -515,7 +515,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='2.3';
+const APP_VER='2.4';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -882,7 +882,7 @@ function findSimilar(pid,date,items,skipId){let best=null;
 let lbEl=null;function closeLb(){if(!lbEl)return false;lbEl.remove();lbEl=null;return true;}
 function showImage(src){closeLb();lbEl=document.createElement('div');lbEl.className='lb';lbEl.innerHTML='<div class="lb-top"><button type="button" class="iconbtn" data-lbx aria-label="Закрыть">'+ICON.x+'</button><span class="cnt">Бланк</span><span style="width:40px"></span></div><div class="lb-img"><img alt="" src="'+src+'"></div>';
   lbEl.addEventListener('click',e=>{if(e.target.closest('[data-lbx]')||e.target.classList.contains('lb-img'))closeLb();});document.body.appendChild(lbEl);}
-const avatar=(p,size)=>'<span class="av" style="background:'+(p&&p.color||COLORS[0])+(size?';width:'+size+'px;height:'+size+'px':'')+'">'+esc(initials(p&&p.name))+'</span>';
+const avatar=(p,size)=>p&&p.photo?'<span class="av" style="padding:0;overflow:hidden;background:var(--surface-2)'+(size?';width:'+size+'px;height:'+size+'px':'')+'"><img src="'+p.photo+'" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></span>':'<span class="av" style="background:'+(p&&p.color||COLORS[0])+(size?';width:'+size+'px;height:'+size+'px':'')+'">'+esc(initials(p&&p.name))+'</span>';
 
 /* ---------- Экраны ---------- */
 function render(){
@@ -945,6 +945,7 @@ function openProfile(id){const p=id?st.profiles[id]:{id:uid(),name:'',sex:'',bir
    '<section class="card"><div class="stack" style="gap:12px"><div class="fld"><label>Пол</label><div class="seg" role="group">'+[['f','Женский'],['m','Мужской']].map(([k,l])=>'<button type="button" data-psex="'+k+'" aria-pressed="'+(p.sex===k)+'">'+l+'</button>').join('')+'</div></div>'+
    '<div class="fld"><label for="pf-dob">Дата рождения</label><input id="pf-dob" data-pf="dob" type="date" value="'+esc(p.dob||'')+'"></div>'+
    '<div class="row" style="gap:10px;flex-wrap:nowrap"><div class="fld"><label for="pf-h">Рост, см</label><input id="pf-h" data-pf="height" type="number" inputmode="decimal" value="'+esc(p.height||'')+'" placeholder="184"></div><div class="fld"><label for="pf-w">Вес сейчас, кг</label><input id="pf-w" data-pf="wNow" type="number" inputmode="decimal" value="" placeholder="'+esc((wlogGet(p).slice(-1)[0]||{}).kg||'84')+'"></div></div>'+
+   '<div class="fld"><label>Фото</label><div class="row" style="gap:10px;align-items:center"><span id="pf-av">'+avatar(p,56)+'</span><label class="btn sm" style="position:relative">Загрузить фото<input type="file" accept="image/*" data-pphoto style="position:absolute;inset:0;opacity:0"></label>'+(TGA&&TGA.initDataUnsafe&&TGA.initDataUnsafe.user&&TGA.initDataUnsafe.user.photo_url?'<button type="button" class="btn sm ghost" data-act="tgphoto">Из Telegram</button>':'')+(p.photo?'<button type="button" class="btn sm ghost" data-act="nophoto">Убрать</button>':'')+'</div></div>'+
    '<div class="fld"><label>Цвет</label><div class="colors">'+COLORS.map(c=>'<button type="button" data-pcolor="'+c+'" style="background:'+c+'" aria-pressed="'+(p.color===c)+'" aria-label="Цвет"></button>').join('')+'</div></div></div></section>'+
    '<button type="button" class="btn primary block big-cta" data-act="saveprof">'+(isNew?'Создать':'Сохранить')+'</button></div>','prof',p.id);
   if(isNew)setTimeout(()=>{const i=sheetIn.querySelector('[data-pf="name"]');if(i)i.focus();},60);}
@@ -966,6 +967,7 @@ async function pdfPages(file){const lib=await loadPdfJs();const doc=await lib.ge
   return pages;}
 function attachFile(upId,file){if(!file)return;if(draft&&draft.upId===upId){draft.file=file;}
   const t=Object.values(st.tests).find(t=>t.upId===upId);if(t){t.file=file;delete t.upId;persist('a',t.id);autoName('a',t.id);}}
+function squareImg(file,size){return new Promise((res,rej)=>{const url=URL.createObjectURL(file);const im=new Image();im.onload=()=>{const s=Math.min(im.naturalWidth,im.naturalHeight);const c=document.createElement('canvas');c.width=c.height=size;const x=c.getContext('2d');x.drawImage(im,(im.naturalWidth-s)/2,(im.naturalHeight-s)/2,s,s,0,0,size,size);URL.revokeObjectURL(url);res(c.toDataURL('image/jpeg',.82));};im.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('img'));};im.src=url;});}
 const readAsDataURL=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});
 async function handleBlank(file,force){const p=curP();
   if(!SY.ready){toast('Распознавание доступно в Telegram после подключения сервера.');return;}
@@ -1621,6 +1623,8 @@ document.addEventListener('click',e=>{const t=e.target;let el;
     if(a==='adddoc'){editDoc(null);return;}
     if(a==='ckall'){openCheckups();return;}
     if(a==='mednew'){openMedNew();return;}
+    if(a==='nophoto'&&draft&&draft.kind==='prof'){delete draft.p.photo;const x=$('#pf-av');if(x)x.innerHTML=avatar(draft.p,56);el.remove();return;}
+    if(a==='tgphoto'&&draft&&draft.kind==='prof'){const u=TGA.initDataUnsafe.user.photo_url;fetch(u).then(r=>r.blob()).then(b=>squareImg(b,192)).then(d=>{draft.p.photo=d;const x=$('#pf-av');if(x)x.innerHTML=avatar(draft.p,56);}).catch(()=>toast('Telegram не отдал фото — загрузите файлом.'));return;}
     if(a==='exportnow'){toast('Обновляю таблицу…');exportReadable(true);return;}
     if(a==='mednames'){openMedNames();return;}
     if(a==='medrename'){doMedRename();return;}
@@ -1656,6 +1660,7 @@ document.addEventListener('change',e=>{const t=e.target;
   if(t.dataset.pfrom!==undefined||t.dataset.pto!==undefined){if(t.dataset.pfrom!==undefined)indFrom=t.value;else indTo=t.value;if(t.dataset.perind){const sc=sheet.scrollTop;openIndicator(t.dataset.perind);sheet.scrollTop=sc;}render();return;}
   if(draft&&draft.kind==='doc'&&t.dataset.df){draft.d[t.dataset.df]=t.value;return;}
   if(t.dataset.blank!==undefined&&t.files&&t.files[0]){const f=t.files[0];t.value='';handleBlank(f);return;}
+  if(t.dataset.pphoto!==undefined&&t.files&&t.files[0]&&draft&&draft.kind==='prof'){const f=t.files[0];t.value='';squareImg(f,192).then(d=>{draft.p.photo=d;const a=$('#pf-av');if(a)a.innerHTML=avatar(draft.p,56);}).catch(()=>toast('Не получилось открыть фото.'));return;}
   if(t.dataset.health!==undefined&&t.files&&t.files[0]){const f=t.files[0];t.value='';importHealth(f);return;}
   if(t.dataset.import!==undefined&&t.files&&t.files[0]){const f=t.files[0];t.value='';importFile(f);return;}
   if(t.dataset.docfile!==undefined&&t.files&&t.files[0]){const f=t.files[0];t.value='';addDocFile(f);return;}
