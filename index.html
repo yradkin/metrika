@@ -460,6 +460,11 @@ body.dragmode{-webkit-user-select:none;user-select:none}
 .colors button{width:34px;height:34px;border-radius:50%;border:2px solid transparent;cursor:pointer}
 .colors button[aria-pressed="true"]{border-color:var(--txt)}
 .tabbar{grid-template-columns:repeat(4,1fr)!important}
+.sysgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sys{appearance:none;text-align:left;font:inherit;color:var(--txt);background:var(--surface-2);border:1px solid var(--line);border-radius:16px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;cursor:pointer;min-width:0}
+.sys .sic{font-size:20px;line-height:1}
+.sys .sn{font-weight:700;font-size:14px;line-height:1.2;margin-top:4px}
+.sys .ss{font-size:12px;font-weight:600;display:flex;align-items:center}
 .imini{width:96px;height:50px;flex:none;display:block}
 .irow{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0;border-top:1px solid var(--line);cursor:pointer}
 .irow:first-child{border-top:0}
@@ -509,7 +514,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='1.8';
+const APP_VER='1.9';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -901,9 +906,10 @@ function homeHTML(){const p=curP();const ts=testsOf(p.id);const inds=indicatorsO
   let h='<div class="row" style="justify-content:space-between">'+profChip()+'</div>';
   h+='<section class="hero"><div class="names">'+esc(p.name)+'</div><div class="when">'+(ts.length?ts.length+' '+plural(ts.length,'анализ','анализа','анализов')+' · последний '+fmtD(ts[0].date):'Анализов пока нет')+'</div><div class="count"><span class="big">'+inds.length+'</span><span class="lbl">'+plural(inds.length,'показатель','показателя','показателей')+'<br>'+(bad.length?'<b>'+bad.length+' вне нормы</b>':'все в норме')+'</span></div></section>';
   if(!SY.ro)h+='<button type="button" class="btn primary block big-cta" data-act="addtest">'+ICON.up.replace('<svg','<svg width="20" height="20" style="stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"')+'Загрузить анализ</button>';
+  if(ts.length)h+=sysHTML(p)+ckHTML(p,4);
   if(bad.length)h+='<section class="card"><div class="h"><h2>Требуют внимания</h2><span class="pill p-crit">'+bad.length+'</span></div><div class="list">'+bad.map(x=>indRow2(x,p)).join('')+'</div></section>';
   const rem=Object.entries(p.remind||{}).filter(([k,d])=>d&&daysTo(d)<=45).sort((a,b)=>a[1].localeCompare(b[1]));
-  if(rem.length)h+='<section class="card"><div class="h"><h2>Пора сдать</h2></div><div class="list">'+rem.map(([k,d])=>{const nm=CAT[k]?CAT[k].name:k.replace(/^x:/,'');const dd=daysTo(d);return '<div class="li" data-ind="'+esc(k)+'"><span class="dot '+(dd<0?'crit':dd<=7?'warn':'acc')+'"></span><div><div class="t">'+esc(nm)+'</div><div class="s">'+(dd<0?'просрочено на '+(-dd)+' дн.':dd===0?'сегодня':'через '+dd+' дн.')+' · '+fmtD(d)+'</div></div><div class="r"></div></div>';}).join('')+'</div></section>';
+  if(rem.length)h+='<section class="card"><div class="h"><h2>Пора сдать</h2></div><div class="list">'+rem.map(([k,d])=>{const ck=/^ck:/.test(k)?CHECK.find(c=>'ck:'+c.id===k):null;const nm=ck?ck.t:CAT[k]?CAT[k].name:k.replace(/^x:/,'');const dd=daysTo(d);return '<div class="li" '+(ck?'data-ck="'+ck.id+'"':'data-ind="'+esc(k)+'"')+'><span class="dot '+(dd<0?'crit':dd<=7?'warn':'acc')+'"></span><div><div class="t">'+esc(nm)+'</div><div class="s">'+(dd<0?'просрочено на '+(-dd)+' дн.':dd===0?'сегодня':'через '+dd+' дн.')+' · '+fmtD(d)+'</div></div><div class="r"></div></div>';}).join('')+'</div></section>';
   if(ts.length){const t=ts[0];h+='<section class="card"><div class="h"><h2>Последний анализ</h2><button type="button" class="link" data-test="'+t.id+'">Открыть</button></div><div class="small muted" style="margin:-4px 0 6px">'+fmtD(t.date)+(t.lab?' · '+esc(t.lab):'')+'</div><div class="list">'+(t.items||[]).slice(0,6).map(it=>itemRow(it,p)).join('')+'</div></section>';}
   else h+='<section class="card"><div class="empty">Загрузите первый анализ — фото или PDF бланка из лаборатории. Можно и вручную.</div></section>';
   return h;}
@@ -1291,6 +1297,100 @@ function openNormSet(key){const p=curP();const x=indicatorsOf(p.id).find(y=>y.ke
   openSheet(top('Своя норма')+'<div class="stack"><section class="card"><div class="small" style="margin-bottom:10px;color:var(--txt-2)">'+esc(x.name)+'. Своя норма заменит интервалы с бланков и типичные — например, цель, которую поставил врач.</div><div class="row" style="gap:8px;flex-wrap:nowrap"><div class="fld"><label>от</label><input class="inp" id="nm-lo" type="number" inputmode="decimal" value="'+esc(own.lo!=null?own.lo:'')+'" placeholder="'+esc(n.lo!=null?fmtN(n.lo):'')+'"></div><div class="fld"><label>до</label><input class="inp" id="nm-hi" type="number" inputmode="decimal" value="'+esc(own.hi!=null?own.hi:'')+'" placeholder="'+esc(n.hi!=null?fmtN(n.hi):'')+'"></div><div class="fld"><label>&nbsp;</label><span class="ref" style="line-height:44px">'+esc(x.last.unit||'')+'</span></div></div></section>'+
     '<button type="button" class="btn primary block big-cta" data-normsave="'+esc(key)+'">Сохранить</button>'+(p.norms&&p.norms[key]?'<button type="button" class="btn block" data-normreset="'+esc(key)+'">Вернуть нормы с бланков</button>':'')+'</div>','normset',key);}
 
+/* ---------- Оценка по системам организма ---------- */
+const SYSTEMS=[
+ {k:'blood',n:'Кровь',ic:'💧',codes:['HGB','RBC','HCT','MCV','MCH','MCHC','RDW','WBC','PLT','ESR','NEU','NEU_A','LYM','LYM_A','MON','MON_A','EOS','EOS_A','BAS','BAS_A']},
+ {k:'heart',n:'Сердце и сосуды',ic:'❤️',codes:['CHOL','LDL','HDL','NHDL','KA','TG'],docs:/сердц|эхокг|экг|холтер|кардиолог|сосуд|бца|брахиоцеф/i},
+ {k:'liver',n:'Печень',ic:'🧪',codes:['ALT','AST','GGT','ALP','TBIL','DBIL','IBIL','ALB','TP'],docs:/брюшн/i},
+ {k:'kidney',n:'Почки',ic:'🫘',codes:['CREA','UREA','UA'],urine:true},
+ {k:'sugar',n:'Обмен сахара',ic:'🍬',codes:['GLU','HBA1C','INS']},
+ {k:'thyroid',n:'Щитовидная железа',ic:'🦋',codes:['TSH','FT4','FT3','TPO'],docs:/щитовид/i},
+ {k:'vit',n:'Витамины и минералы',ic:'☀️',codes:['VITD','B12','FOL','FERR','FE','MG','CA','K','NA','CL']},
+ {k:'infl',n:'Воспаление и иммунитет',ic:'🛡️',codes:['CRP','ASLO','RF','IGA','IGG']},
+ {k:'weight',n:'Вес',ic:'⚖️',vital:'V_BMI'}];
+/* насколько далеко за границей: 0 — в норме, >0 — доля выхода */
+function devOf(it,p){const v=num(it.value);if(v==null)return 0;const n=normFor(it,p);if(n.hi!=null&&v>n.hi)return (v-n.hi)/Math.max(Math.abs(n.hi),1e-9);if(n.lo!=null&&v<n.lo)return (n.lo-v)/Math.max(Math.abs(n.lo),1e-9);return 0;}
+function systemsOf(p){const inds=indicatorsOf(p.id);const byKey={};inds.forEach(x=>byKey[x.key]=x);const vit=vitalsOf(p);const now=today();const docs=docsOf(p.id);
+  return SYSTEMS.map(S=>{let xs=[];
+    if(S.vital){const v=vit.find(x=>x.key===S.vital);if(v)xs=[v];}
+    else{xs=(S.codes||[]).map(c=>byKey[c]).filter(Boolean);if(S.urine)xs=xs.concat(inds.filter(x=>x.grp==='urine'));}
+    const lastDate=xs.reduce((m,x)=>x.last.date&&x.last.date>m?x.last.date:m,'');
+    const fresh=xs.filter(x=>x.last.date&&(now-parseD(x.last.date))/864e5<=548);
+    const outs=fresh.map(x=>({x,d:devOf(x.last,p),s:statusOf(x.last,p)})).filter(o=>o.s==='high'||o.s==='low');
+    const maxDev=outs.reduce((m,o)=>Math.max(m,o.d),0);
+    let st='none';if(fresh.length){st=!outs.length?'ok':(maxDev>0.25||outs.length>=3)?'bad':'warn';}
+    const rd=S.docs?docs.filter(d=>S.docs.test((d.title||'')+' '+(d.spec||''))):[];
+    return {S,xs,fresh,outs,st,lastDate,docs:rd};});}
+const sysCol={ok:'var(--good)',warn:'#d8963a',bad:'var(--crit)',none:'var(--txt-3)'};
+const sysTxt=y=>y.st==='none'?(y.xs.length?'давно не проверяли':'нет данных'):y.st==='ok'?'в норме':y.outs.length+' '+plural(y.outs.length,'отклонение','отклонения','отклонений');
+function sysHTML(p){const ys=systemsOf(p);const okN=ys.filter(y=>y.st==='ok').length,known=ys.filter(y=>y.st!=='none').length;
+  return '<section class="card"><div class="h"><h2>Оценка по системам</h2><span class="small muted">'+okN+' из '+known+' в норме</span></div><div class="sysgrid">'+ys.map(y=>
+    '<button type="button" class="sys" data-sys="'+y.S.k+'"><span class="sic">'+y.S.ic+'</span><span class="sn">'+esc(y.S.n)+'</span><span class="ss" style="color:'+sysCol[y.st]+'"><i class="sdot" style="background:'+sysCol[y.st]+';margin:0 5px 0 0"></i>'+sysTxt(y)+'</span></button>').join('')+'</div></section>';}
+function openSystem(k){const p=curP();const y=systemsOf(p).find(z=>z.S.k===k);if(!y)return;
+  let h=top(y.S.n)+'<div class="stack"><section class="card" style="text-align:center"><div style="font-size:40px">'+y.S.ic+'</div><div style="font-weight:800;font-size:20px;color:'+sysCol[y.st]+'">'+({ok:'В норме',warn:'Есть отклонения',bad:'Заметные отклонения',none:'Нет свежих данных'}[y.st])+'</div><div class="small muted">'+(y.lastDate?'последние данные '+fmtD(y.lastDate):'анализов пока нет')+(y.fresh.length?' · учтено '+y.fresh.length+' '+plural(y.fresh.length,'показатель','показателя','показателей'):'')+'</div></section>';
+  if(y.outs.length)h+='<section class="card"><div class="h"><h2>Отклонения</h2></div><div class="list">'+y.outs.sort((a,b)=>b.d-a.d).map(o=>indRow2(o.x,p)).join('')+'</div></section>';
+  const rest=y.xs.filter(x=>!y.outs.some(o=>o.x===x));
+  if(rest.length)h+='<section class="card"><div class="h"><h2>Показатели</h2></div><div class="list">'+rest.map(x=>indRow2(x,p)).join('')+'</div></section>';
+  const recs=checkupOf(p).filter(r=>r.sys===k);
+  if(recs.length)h+='<section class="card"><div class="h"><h2>Что пройти</h2></div><div class="list">'+recs.map(ckRow).join('')+'</div></section>';
+  if(y.docs.length)h+='<section class="card"><div class="h"><h2>Обследования</h2></div><div class="list">'+y.docs.slice(0,8).map(d=>'<div class="li" data-doc="'+d.id+'"><span class="dot acc"></span><div><div class="t">'+esc(d.title)+'</div><div class="s">'+fmtD(d.date)+(d.conclusion?' · '+esc(clip(d.conclusion,80)):'')+'</div></div><div class="r"></div></div>').join('')+'</div></section>';
+  h+='</div>';openSheet(h,'sys',k);}
+/* ---------- Рекомендации: что и когда пройти ---------- */
+const CHECK=[
+ {id:'cbc',t:'Общий анализ крови',sys:'blood',codes:['HGB','WBC'],m:12,why:'Базовый скрининг: анемия, воспаление, состояние иммунитета.'},
+ {id:'liver',t:'Печёночные пробы (АЛТ, АСТ, ГГТ, билирубин)',sys:'liver',codes:['ALT','AST','GGT','TBIL'],m:12,why:'Работа печени и желчных путей.'},
+ {id:'kidney',t:'Креатинин и мочевина',sys:'kidney',codes:['CREA','UREA'],m:12,why:'Работа почек.'},
+ {id:'urine',t:'Общий анализ мочи',sys:'kidney',urine:true,m:12,why:'Почки и мочевые пути.'},
+ {id:'lipid',t:'Липидограмма',sys:'heart',codes:['LDL','CHOL','HDL'],m:12,why:'Риск атеросклероза; при отклонениях — чаще.'},
+ {id:'glu',t:'Глюкоза натощак',sys:'sugar',codes:['GLU'],m:12,why:'Скрининг преддиабета.'},
+ {id:'hba1c',t:'Гликированный гемоглобин',sys:'sugar',codes:['HBA1C'],m:36,age:35,why:'Средний сахар за 3 месяца — точнее разовой глюкозы.'},
+ {id:'tsh',t:'ТТГ',sys:'thyroid',codes:['TSH'],m:24,why:'Главный анализ на работу щитовидной железы.'},
+ {id:'vitd',t:'Витамин D',sys:'vit',codes:['VITD'],m:12,why:'Дефицит частый, особенно зимой; при приёме добавок — контроль.'},
+ {id:'ferr',t:'Ферритин',sys:'vit',codes:['FERR'],m:24,why:'Запас железа — снижается раньше гемоглобина.'},
+ {id:'b12',t:'Витамин B12',sys:'vit',codes:['B12'],m:36,why:'Кроветворение и нервная система.'},
+ {id:'ua',t:'Мочевая кислота',sys:'kidney',codes:['UA'],m:12,why:'Риск подагры и камней.'},
+ {id:'psa',t:'ПСА общий',sys:'',codes:['PSA'],m:12,age:45,sex:'m',why:'Скрининг предстательной железы у мужчин после 45.'},
+ {id:'ecg',t:'ЭКГ',sys:'heart',docre:/экг|холтер|электрокардиогр/i,m:12,why:'Ритм и проводимость сердца.'},
+ {id:'echo',t:'УЗИ сердца (ЭхоКГ)',sys:'heart',docre:/сердц|эхокг/i,m:36,why:'Строение и работа сердца.'},
+ {id:'usabd',t:'УЗИ брюшной полости',sys:'liver',docre:/брюшн/i,m:24,why:'Печень, желчный пузырь, поджелудочная, почки, селезёнка.'},
+ {id:'usthy',t:'УЗИ щитовидной железы',sys:'thyroid',docre:/щитовид/i,m:24,why:'Узлы и структура железы.'},
+ {id:'xray',t:'Флюорография / рентген лёгких',sys:'',docre:/рентген|флюорогр|огк/i,m:12,why:'Ежегодный профилактический скрининг.'},
+ {id:'ther',t:'Профилактический осмотр терапевта',sys:'',docre:/терапевт/i,m:12,why:'Давление, общий осмотр, план обследований.'},
+ {id:'eye',t:'Офтальмолог',sys:'',docre:/офтальм|окулист|глазн/i,m:24,why:'Зрение и глазное давление.'},
+ {id:'dent',t:'Стоматолог',sys:'',docre:/стомат|зуб/i,m:12,why:'Профилактический осмотр и чистка.'},
+ {id:'derm',t:'Дерматолог: осмотр родинок',sys:'',docre:/дерматолог/i,m:24,why:'Ранняя диагностика новообразований кожи.'},
+ {id:'colon',t:'Колоноскопия',sys:'',docre:/колоноскоп/i,m:120,age:45,why:'Скрининг рака кишечника после 45.'}];
+function addMonths(d,m){const x=parseD(d);x.setMonth(x.getMonth()+m);return ymd(x);}
+function checkupOf(p){const age=ageOf(p);const inds=indicatorsOf(p.id);const by={};inds.forEach(x=>by[x.key]=x);const docs=docsOf(p.id);const t0=today();const out=[];
+  CHECK.forEach(c=>{if(c.age&&(age==null||age<c.age))return;if(c.sex&&p.sex&&p.sex!==c.sex)return;
+    let last='',outOf=null,m=c.m;
+    if(c.codes)c.codes.forEach(k=>{const x=by[k];if(x&&x.last.date>last){last=x.last.date;}});
+    if(c.codes)c.codes.forEach(k=>{const x=by[k];if(x&&x.last.date===last){const s=statusOf(x.last,p);if(s==='high'||s==='low')outOf=x;}});
+    if(c.urine){inds.filter(x=>x.grp==='urine').forEach(x=>{if(x.last.date>last)last=x.last.date;});}
+    if(c.docre)docs.forEach(d=>{if(c.docre.test((d.title||'')+' '+(d.spec||''))&&d.date>last)last=d.date;});
+    if(outOf)m=Math.min(m,devOf(outOf.last,p)>0.1?3:6);
+    if(c.id==='vitd'&&by.VITD&&num(by.VITD.last.value)!=null&&num(by.VITD.last.value)<30)m=3;
+    if(c.id==='usthy'&&docs.some(d=>/щитовид/i.test(d.title||'')&&/узл|кист/i.test(d.conclusion||'')))m=12;
+    const due=last?addMonths(last,m):'';const remK='ck:'+c.id;const rem=(p.remind||{})[remK]||'';
+    const dd=due?Math.round((parseD(due)-t0)/864e5):-1;
+    out.push({c,id:c.id,sys:c.sys,t:c.t,why:outOf?'Последнее значение «'+outOf.name+'» вне нормы — контроль через '+m+' мес.':c.why,last,due,dd,st:!last?'never':dd<0?'over':dd<=60?'soon':'ok',rem,remK});});
+  const rank={over:0,never:1,soon:2,ok:3};return out.sort((a,b)=>rank[a.st]-rank[b.st]||a.dd-b.dd);}
+const ckCol={over:'var(--crit)',never:'#d8963a',soon:'#d8963a',ok:'var(--good)'};
+function ckRow(r){const lab=r.st==='never'?'ещё не делали':r.st==='over'?'пора: просрочено на '+fmtAgoD(-r.dd):r.st==='soon'?'через '+fmtAgoD(r.dd):'следующий раз '+fmtD(r.due);
+  return '<div class="li" data-ck="'+r.id+'"><span class="sdot" style="background:'+ckCol[r.st]+';margin:0"></span><div><div class="t">'+esc(r.t)+'</div><div class="s"><b style="color:'+ckCol[r.st]+'">'+lab+'</b>'+(r.last?' · было '+fmtD(r.last):'')+'</div><div class="s" style="margin-top:2px">'+esc(r.why)+'</div>'+(r.rem?'<div class="s">🔔 напоминание '+fmtD(r.rem)+'</div>':'')+'</div><div class="r"></div></div>';}
+const fmtAgoD=d=>d>=60?Math.round(d/30.5)+' мес.':d+' '+plural(d,'день','дня','дней');
+function ckHTML(p,limit){const all=checkupOf(p);const todo=all.filter(r=>r.st!=='ok');const list=limit?todo.slice(0,limit):all;
+  if(!all.length)return '';
+  return '<section class="card"><div class="h"><h2>Что пройти</h2>'+(limit?'<button type="button" class="link" data-act="ckall">Все '+all.length+'</button>':'')+'</div>'+(list.length?'<div class="list">'+list.map(ckRow).join('')+'</div>':'<div class="empty">Всё пройдено вовремя 👍</div>')+'</section>';}
+function openCheckups(){const p=curP();openSheet(top('План обследований')+'<div class="stack"><p class="small muted" style="margin:0">Сроки — по возрасту, полу и дате последнего анализа или обследования. Если значение было вне нормы, срок сокращается.</p>'+ckHTML(p,0)+'</div>','ck');}
+function openCheck(id){const p=curP();const r=checkupOf(p).find(x=>x.id===id);if(!r)return;
+  let h=top(r.t)+'<div class="stack"><section class="card"><div style="line-height:1.45">'+esc(r.c.why)+'</div><div class="small muted" style="margin-top:8px">Обычный интервал: '+(r.c.m>=12?(r.c.m/12)+' '+plural(r.c.m/12,'год','года','лет'):r.c.m+' мес.')+'</div>'+
+    '<div class="li" style="cursor:default;margin-top:10px;border-top:1px solid var(--line)"><span class="sdot" style="background:'+ckCol[r.st]+';margin:0"></span><div><div class="t">'+(r.last?'Последний раз '+fmtD(r.last):'Ещё не делали')+'</div><div class="s">'+(r.due?'Следующий срок: '+fmtD(r.due):'Лучше сделать в ближайшее время')+'</div></div><div class="r"></div></div></section>';
+  const sug=r.due&&r.dd>0?r.due:ymd(new Date(Date.now()+14*864e5));
+  h+='<section class="card"><div class="fld"><label for="ck-rem">Напомнить</label><div class="withbtn"><input id="ck-rem" type="date" class="inp" data-remind="'+esc(r.remK)+'" value="'+esc(r.rem||'')+'">'+(r.rem?'<button type="button" class="iconbtn" data-gcal="'+esc(r.remK)+'" aria-label="В календарь" style="height:44px;width:44px">'+ICON.cal+'</button>':'')+'</div></div>'+(r.rem?'':'<div class="row" style="margin-top:8px"><button type="button" class="chip" data-ckrem="'+esc(r.remK)+'" data-d="'+sug+'">'+fmtD(sug)+'</button></div>')+'</section>';
+  if(r.c.codes){const xs=indicatorsOf(p.id).filter(x=>r.c.codes.includes(x.key));if(xs.length)h+='<section class="card"><div class="h"><h2>Показатели</h2></div><div class="list">'+xs.map(x=>indRow2(x,p)).join('')+'</div></section>';}
+  h+='</div>';openSheet(h,'check',id);}
+
 /* ---------- Отчёт для врача (PDF) ---------- */
 function buildReport(p){const inds=indicatorsOf(p.id),ts=testsOf(p.id);const e=esc;const now=new Date();
   let h='<html><head><meta charset="utf-8"><style>body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#122026;line-height:1.35}h1{font-family:Georgia,serif;font-weight:normal;font-size:22pt;margin:0;color:#0b5357}h2{font-size:12.5pt;margin:20px 0 6px;padding-bottom:4px;border-bottom:2px solid #bfe3df;color:#0b5357}.m{color:#5a6d72}.s{font-size:8.5pt;color:#5a6d72}table{width:100%;border-collapse:collapse;margin:4px 0 8px}th{text-align:left;font-size:8.5pt;color:#5a6d72;border-bottom:1.5px solid #bcd7d4;padding:4px 5px}td{vertical-align:top;border-bottom:1px solid #e3efee;padding:4px 5px}.lo{color:#2f6fd0;font-weight:bold}.hi{color:#c03550;font-weight:bold}.num{white-space:nowrap}</style></head><body>';
@@ -1355,7 +1455,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
   if((el=t.closest('[data-rion]'))&&draft){const it=draft.items[+el.dataset.rion];it.on=!it.on;renderReview();return;}
   if((el=t.closest('[data-remin]'))){const p=curP();const d=new Date();d.setMonth(d.getMonth()+(+el.dataset.remin));p.remind=p.remind||{};p.remind[el.dataset.k]=ymd(d);persist('p',p.id);openIndicator(el.dataset.k);toast('Напоминание: '+fmtD(ymd(d))+'.');return;}
   if((el=t.closest('[data-remclear]'))){const p=curP();delete (p.remind||{})[el.dataset.remclear];persist('p',p.id);openIndicator(el.dataset.remclear);return;}
-  if((el=t.closest('[data-gcal]'))){const p=curP();const k=el.dataset.gcal;const d=(p.remind||{})[k];if(d)openUrl(gcal('Сдать анализ: '+(CAT[k]?CAT[k].name:k.replace(/^x:/,''))+' — '+p.name,d,'Напоминание из «'+APP_NAME+'»'));return;}
+  if((el=t.closest('[data-gcal]'))){const p=curP();const k=el.dataset.gcal;const d=(p.remind||{})[k];if(d)openUrl(gcal((/^ck:/.test(k)?'Пройти: '+((CHECK.find(c=>'ck:'+c.id===k)||{}).t||''):'Сдать анализ: '+(CAT[k]?CAT[k].name:k.replace(/^x:/,'')))+' — '+p.name,d,'Напоминание из «'+APP_NAME+'»'));return;}
   if((el=t.closest('[data-approve]'))){const [id,role]=el.dataset.approve.split('|');api('approve',{id:+id,role}).then(r=>{SY.members=r.members||SY.members;SY.requests=r.requests||[];updSync();refreshShareUI();toast('Доступ открыт.');}).catch(()=>toast('Не получилось, проверьте интернет.'));return;}
   if((el=t.closest('[data-deny]'))){api('deny',{id:+el.dataset.deny}).then(r=>{SY.requests=r.requests||[];SY.blocked=r.blocked||SY.blocked;updSync();refreshShareUI();toast('Запрос отклонён. Вернуть можно в «Доступ закрыт».');}).catch(()=>toast('Не получилось, проверьте интернет.'));return;}
   if((el=t.closest('[data-role]'))){const [id,r]=el.dataset.role.split('|');api('role',{id:+id,role:r}).then(x=>{SY.members=x.members||SY.members;refreshShareUI();}).catch(()=>toast('Не получилось.'));return;}
@@ -1366,6 +1466,9 @@ document.addEventListener('click',e=>{const t=e.target;let el;
   if((el=t.closest('[data-theme-set]'))){const k=el.dataset.themeSet;try{if(k==='auto')localStorage.removeItem('health-theme');else localStorage.setItem('health-theme',k);}catch(err){}
     if(k==='auto'){if(TGA)document.documentElement.setAttribute('data-theme',TGA.colorScheme==='dark'?'dark':'light');else document.documentElement.removeAttribute('data-theme');}else document.documentElement.setAttribute('data-theme',k);tgColors();sheetIn.querySelectorAll('[data-theme-set]').forEach(b=>b.setAttribute('aria-pressed',String(b===el)));return;}
   if((el=t.closest('[data-sub]'))){sub=el.dataset.sub;render();return;}
+  if((el=t.closest('[data-sys]'))){openSystem(el.dataset.sys);return;}
+  if((el=t.closest('[data-ckrem]'))){const p=curP();p.remind=p.remind||{};p.remind[el.dataset.ckrem]=el.dataset.d;persist('p',p.id);openCheck(el.dataset.ckrem.slice(3));render();toast('Напоминание на '+fmtD(el.dataset.d)+'.');return;}
+  if((el=t.closest('[data-ck]'))){openCheck(el.dataset.ck);return;}
   if((el=t.closest('[data-per]'))){indPer=+el.dataset.per;if(el.dataset.perind){const sc=sheet.scrollTop;openIndicator(el.dataset.perind);sheet.scrollTop=sc;}render();return;}
   if((el=t.closest('[data-normset]'))){openNormSet(el.dataset.normset);return;}
   if((el=t.closest('[data-normsave]'))){const p=curP();const k=el.dataset.normsave;const lo=num($('#nm-lo').value),hi=num($('#nm-hi').value);p.norms=p.norms||{};if(lo==null&&hi==null)delete p.norms[k];else p.norms[k]={lo:lo==null?'':lo,hi:hi==null?'':hi};persist('p',p.id);openIndicator(k);render();toast('Норма сохранена.');return;}
@@ -1375,6 +1478,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
   if((el=t.closest('[data-editdoc]'))){editDoc(el.dataset.editdoc);return;}
   if((el=t.closest('[data-act]'))){const a=el.dataset.act;
     if(a==='adddoc'){editDoc(null);return;}
+    if(a==='ckall'){openCheckups();return;}
     if(a==='addweight'){const p=curP();const d=$('#vw-d').value||ymd(today()),kg=num($('#vw-kg').value);if(!kg){toast('Введите вес.');return;}p.weights=(p.weights||[]).filter(w=>w.date!==d);p.weights.push({date:d,kg});persist('p',p.id);openIndicator(sheetId||'V_WEIGHT');render();toast('Вес добавлен.');return;}
     if(a==='savedoc'){saveDoc();return;}
     if(a==='deldoc'){const d=draft&&draft.d;if(!d)return;confirmBox({title:'Удалить документ?',text:esc(d.title||'')+' · '+fmtD(d.date)+'. Его можно будет вернуть из корзины.',onOk:()=>{delete st.docs[d.id];persist('d',d.id);draft=null;closeSheet();render();toast('Документ удалён.');}});return;}
