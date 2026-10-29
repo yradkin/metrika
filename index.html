@@ -514,7 +514,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='1.9';
+const APP_VER='2.0';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -964,7 +964,7 @@ async function pdfPages(file){const lib=await loadPdfJs();const doc=await lib.ge
   for(let n=1;n<=Math.min(doc.numPages,15);n++){const pg=await doc.getPage(n);const tc=await pg.getTextContent();pages.push(tc.items.filter(i=>i.str&&i.str.trim()).map(i=>({s:i.str,x:i.transform[4],y:i.transform[5],w:i.width})));}
   return pages;}
 function attachFile(upId,file){if(!file)return;if(draft&&draft.upId===upId){draft.file=file;}
-  const t=Object.values(st.tests).find(t=>t.upId===upId);if(t){t.file=file;delete t.upId;persist('a',t.id);}}
+  const t=Object.values(st.tests).find(t=>t.upId===upId);if(t){t.file=file;delete t.upId;persist('a',t.id);autoName('a',t.id);}}
 const readAsDataURL=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});
 async function handleBlank(file,force){const p=curP();
   if(!SY.ready){toast('Распознавание доступно в Telegram после подключения сервера.');return;}
@@ -1142,7 +1142,7 @@ function saveReview(how){const d=draft;if(!d)return;const items=d.items.filter(x
       buttons:[{label:'Заменить старый',cls:'primary',fn:()=>saveReview('replace:'+sim.t.id)},{label:'Сохранить как отдельный',fn:()=>saveReview('new')},{label:'Отмена',cls:'ghost'}]});return;}}
   const id=how&&how.indexOf('replace:')===0?how.slice(8):(d.edit||uid());const old=st.tests[id]||{};
   st.tests[id]={id,pid:d.pid,date:d.date||ymd(today()),lab:String(d.lab||'').trim(),note:d.note||'',file:d.file||(old.file&&!d.upId?old.file:null)||null,upId:d.file?undefined:(d.upId||undefined),fileHash:d.fileHash||old.fileHash||undefined,items,created:old.created||Date.now(),by:SY.me?SY.me.name:''};
-  persist('a',id);setCur(d.pid);draft=null;closeSheet();tab='home';render();haptic('ok');toast((how&&how.indexOf('replace:')===0?'Анализ заменён: ':'Анализ сохранён: ')+''+items.length+' '+plural(items.length,'показатель','показателя','показателей')+'.');}
+  persist('a',id);autoName('a',id);setCur(d.pid);draft=null;closeSheet();tab='home';render();haptic('ok');toast((how&&how.indexOf('replace:')===0?'Анализ заменён: ':'Анализ сохранён: ')+''+items.length+' '+plural(items.length,'показатель','показателя','показателей')+'.');}
 /* ---------- Обследования: приёмы врачей, УЗИ, МРТ, выписки ---------- */
 const DOC_KINDS=[['visit','Приём врача'],['us','УЗИ'],['mri','МРТ'],['ct','КТ'],['xray','Рентген'],['ecg','ЭКГ'],['endo','Эндоскопия'],['discharge','Выписка'],['cert','Справка'],['other','Другое']];
 const DK=Object.fromEntries(DOC_KINDS);
@@ -1185,7 +1185,7 @@ async function addDocFile(file){const d=draft&&draft.kind==='doc'?draft.d:null;i
     if(empty){try{const x=await api('doc_read',{fid:r.file.id});if(x.mode==='ai'&&x.doc){const g=x.doc;['title','spec','doctor','clinic','conclusion','recs','text'].forEach(k=>{if(!d[k]&&g[k])d[k]=String(g[k]);});if(/^\d{4}-\d{2}-\d{2}$/.test(g.date||''))d.date=g.date;if(DK[g.kind])d.kind=g.kind;}else if(x.text&&!d.text)d.text=x.text;}catch(e){}}
     if(draft&&draft.d===d)renderDocForm();toast(empty?'Файл прикреплён. Проверьте поля.':'Файл прикреплён.');}catch(e){toast('Не получилось загрузить файл.');}}
 function saveDoc(){const d=draft.d;if(!d.title&&!d.conclusion&&!d.files.length){toast('Добавьте название, заключение или файл.');return;}
-  d.title=String(d.title||'').trim()||DK[d.kind]||'Документ';st.docs[d.id]=d;persist('d',d.id);draft=null;closeSheet();tab='tests';sub='docs';render();haptic('ok');toast('Документ сохранён.');}
+  d.title=String(d.title||'').trim()||DK[d.kind]||'Документ';st.docs[d.id]=d;persist('d',d.id);autoName('d',d.id);draft=null;closeSheet();tab='tests';sub='docs';render();haptic('ok');toast('Документ сохранён.');}
 function openTest(id){const t=st.tests[id];if(!t)return;const p=st.profiles[t.pid]||curP();
   let h=top(fmtD(t.date),SY.ro?'':'<button type="button" class="iconbtn" data-edittest="'+id+'" aria-label="Изменить"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>')+'<div class="stack"><div class="small muted">'+esc(p?p.name:'')+(t.lab?' · '+esc(t.lab):'')+'</div>';
   if(t.file)h+='<div class="row"><button type="button" class="btn sm" data-viewfile="'+esc(t.file.id)+'">'+ICON.doc.replace('<svg','<svg width="16" height="16" style="stroke:currentColor;fill:none;stroke-width:2"')+'Бланк</button></div>';
@@ -1391,6 +1391,54 @@ function openCheck(id){const p=curP();const r=checkupOf(p).find(x=>x.id===id);if
   if(r.c.codes){const xs=indicatorsOf(p.id).filter(x=>r.c.codes.includes(x.key));if(xs.length)h+='<section class="card"><div class="h"><h2>Показатели</h2></div><div class="list">'+xs.map(x=>indRow2(x,p)).join('')+'</div></section>';}
   h+='</div>';openSheet(h,'check',id);}
 
+/* ---------- Папка «Медицина документы»: имена файлов, новые файлы ---------- */
+const extOf=n=>{const m=String(n||'').match(/\.[a-z0-9]{2,5}$/i);return m?m[0].toLowerCase():'';};
+const dotDate=d=>d?d.replace(/-/g,'.'):'без даты';
+const cleanFN=t=>String(t||'').replace(/[\\/:*?"<>|]+/g,' ').replace(/[«»]/g,'').replace(/\s+/g,' ').trim();
+const GRP_SHORT={blood:'ОАК',urine:'ОАМ',bio:'Биохимия',lip:'Липидограмма',carb:'Сахар',horm:'Гормоны',iron:'Витамины',elec:'Электролиты',infl:'Иммунитет',other:'Анализ'};
+function testTitle(t){const g=[];(t.items||[]).forEach(it=>{const k=it.code&&CAT[it.code]?CAT[it.code].grp:(it.grp||'other');if(!g.includes(k))g.push(k);});
+  const order=['blood','urine','bio','lip','carb','horm','iron','elec','infl','other'];const gs=order.filter(k=>g.includes(k)).map(k=>GRP_SHORT[k]);
+  return (gs.length>4?gs.slice(0,4):gs).join('+')||'Анализ';}
+const shortClinic=c=>{c=String(c||'').replace(/\([^)]*\)/g,' ').replace(/\s+/g,' ').trim();const pk=c.match(/поликлиник[а-я]*.*?№\s*(\d+)/i);if(pk)return 'Поликлиника №'+pk[1];const q=c.match(/«([^»]+)»/);if(q)c=q[1];c=c.replace(/^(ООО|ОДО|ИООО|ИУП|УЗ|МЦ|МО|медицинский центр)\s+/i,'').replace(/[«»"]/g,'').split(/[,]/)[0].trim();if(c.length>28)c=c.slice(0,28).replace(/\s+\S*$/,'');return c;};
+function testFileName(t,f){return cleanFN(dotDate(t.date)+'_'+testTitle(t)+(t.lab?' ('+shortClinic(t.lab)+')':''))+extOf(f&&f.name);}
+function docFileName(d,f,i,n){return cleanFN(dotDate(d.date)+'_'+(d.title||DK[d.kind]||'Документ')+(d.clinic?' ('+shortClinic(d.clinic)+')':'')+(n>1?' '+(i+1):''))+extOf(f&&f.name);}
+async function autoName(kind,id){if(!SY.ready)return;try{
+  if(kind==='a'){const t=st.tests[id];const f=t&&t.file;if(!f||!f.med)return;const nm=testFileName(t,f);if(f.name===nm)return;const r=await api('file_rename',{fid:f.id,name:nm});f.name=r.name||nm;persist('a',id);}
+  else{const d=st.docs[id];if(!d)return;const fs=(d.files||[]).filter(f=>f.med);let ch=false;for(let i=0;i<fs.length;i++){const nm=docFileName(d,fs[i],i,fs.length);if(fs[i].name===nm)continue;const r=await api('file_rename',{fid:fs[i].id,name:nm});fs[i].name=r.name||nm;ch=true;}if(ch)persist('d',id);}
+}catch(e){}}
+const nfc=x=>String(x||'').normalize('NFC').toLowerCase().trim();
+async function medScan(){const r=await api('med_list');const files=r.files||[];const p=curP();
+  const byId={},byName={};files.forEach(f=>{byId[f.id]=f;byName[nfc(f.name)]=f;});
+  const used={};const plan=[];
+  Object.values(st.docs).filter(d=>d.pid===p.id).forEach(d=>{const fs=(d.files||[]).filter(f=>byId[f.id]);fs.forEach((f,i)=>{used[f.id]=1;plan.push({id:f.id,old:byId[f.id].name,name:docFileName(d,byId[f.id],i,fs.length),kind:'d',ref:d.id});});
+    String(d.source||'').split(/,\s*/).forEach(n=>{const f=byName[nfc(n)];if(f)used[f.id]=1;});});
+  Object.values(st.tests).filter(t=>t.pid===p.id).forEach(t=>{let f=t.file&&byId[t.file.id];if(!f&&t.source)f=byName[nfc(t.source)];if(!f)return;used[f.id]=1;if(plan.some(x=>x.id===f.id))return;plan.push({id:f.id,old:f.name,name:testFileName(t,f),kind:'a',ref:t.id});});
+  const cnt={};plan.forEach(x=>{const k=nfc(x.name);cnt[k]=(cnt[k]||0)+1;});const seen={};plan.forEach(x=>{const k=nfc(x.name);if(cnt[k]>1){seen[k]=(seen[k]||0)+1;if(seen[k]>1)x.name=x.name.replace(/(\.[a-z0-9]{2,5})?$/i,' '+seen[k]+'$1');}});
+  const fresh=files.filter(f=>!used[f.id]&&!/^metrika|^~/.test(f.name)).sort((a,b)=>(b.created||0)-(a.created||0));
+  return {files,plan:plan.filter(x=>x.old!==x.name),fresh};}
+async function openMedNames(){loadingSheet('Названия файлов');let sc;try{sc=await medScan();}catch(e){openSheet(top('Названия файлов')+'<div class="stack"><section class="card"><div class="empty">Не получилось получить список файлов. Обновите сервер до v4.</div></section></div>');return;}
+  SY.medPlan=sc.plan;
+  openSheet(top('Названия файлов')+'<div class="stack"><p class="small muted" style="margin:0">Файлы в «Медицина документы» получат единые имена: <b>год.месяц.день_что (где)</b> — так они сортируются по дате. Сами файлы не меняются.</p>'+
+    (sc.plan.length?'<button type="button" class="btn primary block big-cta" data-act="medrename">Переименовать '+sc.plan.length+' '+plural(sc.plan.length,'файл','файла','файлов')+'</button><section class="card"><div class="list">'+sc.plan.map(x=>'<div class="li" style="cursor:default"><span class="dot acc"></span><div style="min-width:0"><div class="s" style="text-decoration:line-through">'+esc(x.old)+'</div><div class="t" style="white-space:normal">'+esc(x.name)+'</div></div><div class="r"></div></div>').join('')+'</div></section>':'<section class="card"><div class="empty">Все файлы уже названы единообразно 👍</div></section>')+'</div>','mednames');}
+async function doMedRename(){const plan=SY.medPlan||[];if(!plan.length)return;toast('Переименовываю…');
+  try{const r=await api('med_rename',{items:plan.map(x=>({id:x.id,name:x.name}))});
+    plan.forEach(x=>{if(x.kind==='d'){const d=st.docs[x.ref];if(d){(d.files||[]).forEach(f=>{if(f.id===x.id)f.name=x.name;});persist('d',d.id);}}else{const t=st.tests[x.ref];if(t){if(t.file&&t.file.id===x.id)t.file.name=x.name;else{t.file={id:x.id,name:x.name,mime:/\.pdf$/i.test(x.name)?'application/pdf':'image/jpeg',med:true};}t.source=x.name;persist('a',t.id);}}});
+    closeSheet();toast('Готово: переименовано '+(r.renamed||0)+'.');}catch(e){toast('Не получилось: '+(e.message||''));}}
+async function openMedNew(){loadingSheet('Новые файлы');let sc;try{sc=await medScan();}catch(e){openSheet(top('Новые файлы')+'<div class="stack"><section class="card"><div class="empty">Не получилось получить список файлов.</div></section></div>');return;}
+  SY.medFresh=sc.fresh;
+  openSheet(top('Новые файлы')+'<div class="stack"><p class="small muted" style="margin:0">Файлы из «Медицина документы», которых ещё нет в приложении. Положите бланк или заключение в эту папку на Диске — он появится здесь.</p>'+
+    (sc.fresh.length?'<section class="card"><div class="list">'+sc.fresh.map((f,i)=>'<div class="li" style="cursor:default"><span class="dot warn"></span><div style="min-width:0"><div class="t" style="white-space:normal">'+esc(f.name)+'</div><div class="row" style="gap:6px;margin-top:6px"><button type="button" class="btn sm primary" data-medas="a" data-i="'+i+'">Анализ</button><button type="button" class="btn sm" data-medas="d" data-i="'+i+'">Обследование</button><button type="button" class="btn sm ghost" data-viewfile="'+esc(f.id)+'">Открыть</button></div></div><div class="r"></div></div>').join('')+'</div></section>':'<section class="card"><div class="empty">Новых файлов нет.</div></section>')+'</div>','mednew');}
+async function medImport(kind,f){const file={id:f.id,name:f.name,mime:f.mime,med:true};
+  if(kind==='d'){editDoc(null);draft.d.files=[file];renderDocForm();toast('Распознаю документ…');
+    try{const x=await api('doc_read',{fid:f.id});if(!draft||draft.kind!=='doc')return;const d=draft.d;if(x.mode==='ai'&&x.doc){const g=x.doc;['title','spec','doctor','clinic','conclusion','recs','text'].forEach(k=>{if(!d[k]&&g[k])d[k]=String(g[k]);});if(/^\d{4}-\d{2}-\d{2}$/.test(g.date||''))d.date=g.date;if(DK[g.kind])d.kind=g.kind;}else if(x.text)d.text=x.text;renderDocForm();toast('Проверьте поля и сохраните.');}catch(e){toast('Не получилось распознать — заполните вручную.');}
+    return;}
+  openSheet(top('Распознаю бланк')+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div><p class="small" style="margin:8px 0 0;color:var(--txt-2)">Читаю файл с Диска…</p></section></div>','busy');const t0=Date.now();
+  try{let res=null;
+    if(/pdf/i.test(f.mime)||/\.pdf$/i.test(f.name)){const g=await api('file_get',{fid:f.id});if(g.data){const blob=await (await fetch(g.data)).blob();try{const pages=await pdfPages(blob);const pl=pdfPagesToLines(pages);res={items:rowsToItems(pl.lines),date:findDate(pl.head),lab:findLab(pl.head+' '+pages.flat().map(i=>i.s).join(' ')),mode:'pdf'};}catch(e){}}}
+    if(!res||res.items.length<3){const r=await api('recognize',{id:uid(),fid:f.id});if(r.mode==='ai'&&r.ai)res=fromAI(r.ai);else if(r.mode==='ocr')res=parseOCR(r.text||'');else res={items:[],date:'',lab:''};res.mode=r.mode;}
+    res.file=file;res.sec=Math.round((Date.now()-t0)/1000);openReview(res);}catch(e){closeSheet();toast('Не получилось прочитать файл.');}}
+function medCard(){if(!(SY.ready&&SY.owner))return '';return '<section class="card"><div class="h"><h2>Папка «Медицина документы»</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Новые бланки и заключения сохраняются туда с понятными именами.</p><div class="row" style="gap:8px"><button type="button" class="btn sm" data-act="mednew">Проверить новые файлы</button><button type="button" class="btn sm" data-act="mednames">Упорядочить названия</button></div></section>';}
+
 /* ---------- Отчёт для врача (PDF) ---------- */
 function buildReport(p){const inds=indicatorsOf(p.id),ts=testsOf(p.id);const e=esc;const now=new Date();
   let h='<html><head><meta charset="utf-8"><style>body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#122026;line-height:1.35}h1{font-family:Georgia,serif;font-weight:normal;font-size:22pt;margin:0;color:#0b5357}h2{font-size:12.5pt;margin:20px 0 6px;padding-bottom:4px;border-bottom:2px solid #bfe3df;color:#0b5357}.m{color:#5a6d72}.s{font-size:8.5pt;color:#5a6d72}table{width:100%;border-collapse:collapse;margin:4px 0 8px}th{text-align:left;font-size:8.5pt;color:#5a6d72;border-bottom:1.5px solid #bcd7d4;padding:4px 5px}td{vertical-align:top;border-bottom:1px solid #e3efee;padding:4px 5px}.lo{color:#2f6fd0;font-weight:bold}.hi{color:#c03550;font-weight:bold}.num{white-space:nowrap}</style></head><body>';
@@ -1426,7 +1474,7 @@ function refreshShareUI(){const el=$('#shareCard');if(el)el.outerHTML=shareCard(
 function protectCard(){if(!(SY.ready&&SY.owner))return '';return '<section class="card"><div class="h"><h2>Защита данных</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Все прошлые версии и удалённое хранятся. Каждую ночь делается резервная копия.</p><div class="row"><button type="button" class="btn sm" data-act="changelog">Журнал изменений</button><button type="button" class="btn sm" data-act="trash">Корзина</button><button type="button" class="btn sm" data-act="backups">Резервные копии</button></div></section>';}
 function openSettings(){refreshHello();
   openSheet(top('Настройки')+'<div class="stack">'+(profList().length&&((SY.ready&&SY.owner)||!TGA)?'<button type="button" class="btn primary block big-cta" data-act="pdf">'+ICON.dl+'Отчёт для врача (PDF) — '+esc(curP().name)+'</button>':'')+
-   diagCard()+shareCard()+protectCard()+
+   diagCard()+shareCard()+protectCard()+medCard()+
    '<section class="card"><div class="h"><h2>Распознавание бланков</h2></div><p class="small" style="margin:0;color:var(--txt-2)">'+(SY.ai?'Подключена нейросеть Gemini — распознаёт точнее.':'Работает встроенное распознавание текста Google Диска. Для большей точности можно подключить ключ Gemini в настройках скрипта (GEMINI_KEY).')+'</p></section>'+
    (SY.ro?'':'<section class="card"><div class="h"><h2>Импорт истории</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Файл импорта (.json) с анализами за прошлые годы. Повторы пропускаются автоматически.</p><label class="btn block" style="position:relative">'+ICON.up.replace('<svg','<svg width="18" height="18" style="stroke:currentColor;fill:none;stroke-width:2"')+'Выбрать файл импорта<input type="file" accept=".json,application/json" data-import style="position:absolute;inset:0;opacity:0"></label></section>')+
    '<section class="card"><div class="h"><h2>Оформление</h2></div><div class="seg" role="group">'+[['auto','Как в системе'],['light','Светлая'],['dark','Тёмная']].map(([k,l])=>'<button type="button" data-theme-set="'+k+'" aria-pressed="'+((localTheme()||'auto')===k)+'">'+l+'</button>').join('')+'</div></section>'+'<p class="note" style="margin:0">Версия '+APP_VER+(TGA?(TGA.initData?' · Telegram ✓':' · Telegram без подписи'):'')+'</p></div>','settings');}
@@ -1467,6 +1515,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
     if(k==='auto'){if(TGA)document.documentElement.setAttribute('data-theme',TGA.colorScheme==='dark'?'dark':'light');else document.documentElement.removeAttribute('data-theme');}else document.documentElement.setAttribute('data-theme',k);tgColors();sheetIn.querySelectorAll('[data-theme-set]').forEach(b=>b.setAttribute('aria-pressed',String(b===el)));return;}
   if((el=t.closest('[data-sub]'))){sub=el.dataset.sub;render();return;}
   if((el=t.closest('[data-sys]'))){openSystem(el.dataset.sys);return;}
+  if((el=t.closest('[data-medas]'))){const f=(SY.medFresh||[])[+el.dataset.i];if(f)medImport(el.dataset.medas,f);return;}
   if((el=t.closest('[data-ckrem]'))){const p=curP();p.remind=p.remind||{};p.remind[el.dataset.ckrem]=el.dataset.d;persist('p',p.id);openCheck(el.dataset.ckrem.slice(3));render();toast('Напоминание на '+fmtD(el.dataset.d)+'.');return;}
   if((el=t.closest('[data-ck]'))){openCheck(el.dataset.ck);return;}
   if((el=t.closest('[data-per]'))){indPer=+el.dataset.per;if(el.dataset.perind){const sc=sheet.scrollTop;openIndicator(el.dataset.perind);sheet.scrollTop=sc;}render();return;}
@@ -1479,6 +1528,9 @@ document.addEventListener('click',e=>{const t=e.target;let el;
   if((el=t.closest('[data-act]'))){const a=el.dataset.act;
     if(a==='adddoc'){editDoc(null);return;}
     if(a==='ckall'){openCheckups();return;}
+    if(a==='mednew'){openMedNew();return;}
+    if(a==='mednames'){openMedNames();return;}
+    if(a==='medrename'){doMedRename();return;}
     if(a==='addweight'){const p=curP();const d=$('#vw-d').value||ymd(today()),kg=num($('#vw-kg').value);if(!kg){toast('Введите вес.');return;}p.weights=(p.weights||[]).filter(w=>w.date!==d);p.weights.push({date:d,kg});persist('p',p.id);openIndicator(sheetId||'V_WEIGHT');render();toast('Вес добавлен.');return;}
     if(a==='savedoc'){saveDoc();return;}
     if(a==='deldoc'){const d=draft&&draft.d;if(!d)return;confirmBox({title:'Удалить документ?',text:esc(d.title||'')+' · '+fmtD(d.date)+'. Его можно будет вернуть из корзины.',onOk:()=>{delete st.docs[d.id];persist('d',d.id);draft=null;closeSheet();render();toast('Документ удалён.');}});return;}
