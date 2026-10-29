@@ -494,12 +494,12 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='1.3';
+const APP_VER='1.4';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
    Нормы — типичные для взрослых; если на бланке указан свой интервал, берём его. */
-const GROUPS=[['blood','Общий анализ крови'],['bio','Биохимия'],['lip','Холестерин и липиды'],['carb','Сахар'],['iron','Железо и витамины'],['horm','Гормоны'],['elec','Электролиты'],['infl','Воспаление'],['other','Другое']];
+const GROUPS=[['blood','Общий анализ крови'],['bio','Биохимия'],['lip','Холестерин и липиды'],['carb','Сахар'],['iron','Железо и витамины'],['horm','Гормоны'],['elec','Электролиты'],['infl','Воспаление'],['urine','Анализ мочи'],['other','Другое']];
 const N=null;
 const CATALOG=[
  ['HGB','Гемоглобин',['гемоглобин','hgb','hb'],'г/л','blood',[130,170],[120,150],'Белок эритроцитов, переносит кислород. Низкий бывает при анемии, высокий — при обезвоживании, у курящих.'],
@@ -507,27 +507,34 @@ const CATALOG=[
  ['HCT','Гематокрит',['гематокрит','hct'],'%','blood',[39,49],[35,45],'Доля эритроцитов в объёме крови.'],
  ['MCV','Средний объём эритроцита',['средний объем эритроцит','средний объём эритроцит','mcv'],'фл','blood',[80,100],[80,100],'Размер эритроцитов — помогает понять тип анемии.'],
  ['MCH','Содержание гемоглобина в эритроците',['среднее содержание гемоглобина','mch'],'пг','blood',[27,34],[27,34],'Сколько гемоглобина в одном эритроците.'],
- ['MCHC','Концентрация гемоглобина в эритроцитах',['средняя концентрация гемоглобина','mchc'],'г/л','blood',[320,360],[320,360],'Насыщенность эритроцитов гемоглобином.'],
+ ['MCHC','Концентрация гемоглобина в эритроцитах',['средняя концентрация гемоглобина','mchc','мснс'],'г/л','blood',[320,360],[320,360],'Насыщенность эритроцитов гемоглобином.'],
  ['RDW','Ширина распределения эритроцитов',['ширина распределения эритроцитов','rdw','rdw-cv'],'%','blood',[11.5,14.5],[11.5,14.5],'Насколько эритроциты различаются по размеру.'],
  ['WBC','Лейкоциты',['лейкоциты','wbc'],'×10⁹/л','blood',[4,9],[4,9],'Клетки иммунитета. Повышаются при инфекциях и воспалении.'],
  ['PLT','Тромбоциты',['тромбоциты','plt'],'×10⁹/л','blood',[150,400],[150,400],'Отвечают за свёртывание крови.'],
  ['ESR','СОЭ',['соэ','скорость оседания эритроцитов','esr'],'мм/ч','blood',[2,15],[2,20],'Неспецифический признак воспаления.'],
- ['NEU','Нейтрофилы',['нейтрофилы','сегментоядерные','neu'],'%','blood',[47,72],[47,72],'Основные клетки защиты от бактерий.'],
- ['LYM','Лимфоциты',['лимфоциты','lym'],'%','blood',[19,37],[19,37],'Клетки иммунной памяти, борются с вирусами.'],
- ['MON','Моноциты',['моноциты','mon'],'%','blood',[3,11],[3,11],'Клетки, которые «убирают» повреждённые ткани и микробы.'],
- ['EOS','Эозинофилы',['эозинофилы','eos'],'%','blood',[1,5],[1,5],'Повышаются при аллергии и паразитах.'],
- ['BAS','Базофилы',['базофилы','bas','baso'],'%','blood',[0,1],[0,1],'Участвуют в аллергических реакциях.'],
+ ['NEU','Нейтрофилы, %',['нейтрофилы','сегментоядерные','neu'],'%','blood',[47,72],[47,72],'Основные клетки защиты от бактерий.'],
+ ['NEU_A','Нейтрофилы, абс.',['нейтрофилы абс','neu#'],'×10⁹/л','blood',[1.8,7.7],[1.8,7.7],'Количество нейтрофилов в литре крови.'],
+ ['LYM_A','Лимфоциты, абс.',['лимфоциты абс','lym#'],'×10⁹/л','blood',[1.0,4.8],[1.0,4.8],'Количество лимфоцитов в литре крови.'],
+ ['MON_A','Моноциты, абс.',['моноциты абс','mon#'],'×10⁹/л','blood',[0.1,0.9],[0.1,0.9],'Количество моноцитов в литре крови.'],
+ ['EOS_A','Эозинофилы, абс.',['эозинофилы абс','eos#'],'×10⁹/л','blood',[0.02,0.5],[0.02,0.5],'Количество эозинофилов в литре крови.'],
+ ['BAS_A','Базофилы, абс.',['базофилы абс','bas#'],'×10⁹/л','blood',[0,0.1],[0,0.1],'Количество базофилов в литре крови.'],
+ ['LYM','Лимфоциты, %',['лимфоциты','lym'],'%','blood',[19,37],[19,37],'Клетки иммунной памяти, борются с вирусами.'],
+ ['MON','Моноциты, %',['моноциты','mon'],'%','blood',[3,11],[3,11],'Клетки, которые «убирают» повреждённые ткани и микробы.'],
+ ['EOS','Эозинофилы, %',['эозинофилы','eos'],'%','blood',[1,5],[1,5],'Повышаются при аллергии и паразитах.'],
+ ['BAS','Базофилы, %',['базофилы','bas','baso'],'%','blood',[0,1],[0,1],'Участвуют в аллергических реакциях.'],
  ['GLU','Глюкоза',['глюкоза','glu','сахар крови'],'ммоль/л','carb',[4.1,5.9],[4.1,5.9],'Сахар крови натощак.'],
  ['HBA1C','Гликированный гемоглобин',['гликированный гемоглобин','гликозилированный гемоглобин','hba1c'],'%','carb',[4,6],[4,6],'Средний уровень сахара за 2–3 месяца.'],
  ['INS','Инсулин',['инсулин'],'мкЕд/мл','carb',[2.6,24.9],[2.6,24.9],'Гормон, который снижает сахар крови.'],
  ['CHOL','Холестерин общий',['холестерин общий','общий холестерин','холестерин','chol'],'ммоль/л','lip',[N,5.2],[N,5.2],'Общий уровень холестерина. Оценивают вместе с ЛПНП и ЛПВП.'],
  ['LDL','ЛПНП («плохой» холестерин)',['лпнп','холестерин лпнп','липопротеины низкой плотности','ldl'],'ммоль/л','lip',[N,3],[N,3],'Чем ниже, тем меньше риск атеросклероза.'],
  ['HDL','ЛПВП («хороший» холестерин)',['лпвп','холестерин лпвп','липопротеины высокой плотности','hdl'],'ммоль/л','lip',[1,N],[1.2,N],'Защищает сосуды, желательно не ниже нормы.'],
+ ['NHDL','Холестерин не-ЛПВП',['холестерин не лпвп','не лпвп','non hdl'],'ммоль/л','lip',[N,3.8],[N,3.8],'Весь «вредный» холестерин: общий минус ЛПВП.'],
+ ['KA','Коэффициент атерогенности',['коэффициент атерогенности','индекс атерогенности'],'','lip',[N,3],[N,3],'Соотношение «плохого» и «хорошего» холестерина.'],
  ['TG','Триглицериды',['триглицериды','tg'],'ммоль/л','lip',[N,1.7],[N,1.7],'Жиры крови, растут после жирной еды и при лишнем весе.'],
  ['ALT','АЛТ',['аланинаминотрансфераза','алт','алат','alt'],'Ед/л','bio',[N,41],[N,33],'Фермент печени. Повышается при нагрузке на печень.'],
  ['AST','АСТ',['аспартатаминотрансфераза','аст','асат','ast'],'Ед/л','bio',[N,40],[N,32],'Фермент печени и мышц.'],
- ['GGT','ГГТ',['гамма-глутамилтрансфераза','гамма-гт','ггт','ggt'],'Ед/л','bio',N,N,'Фермент печени и желчных путей.'],
- ['ALP','Щелочная фосфатаза',['щелочная фосфатаза','alp'],'Ед/л','bio',N,N,'Фермент печени и костей.'],
+ ['GGT','ГГТ',['гамма-глутамилтрансфераза','гамма гт','гамма-гт','ггт','ggt'],'Ед/л','bio',N,N,'Фермент печени и желчных путей.'],
+ ['ALP','Щелочная фосфатаза',['щелочная фосфатаза','фосфатаза щелочная','alp'],'Ед/л','bio',N,N,'Фермент печени и костей.'],
  ['TBIL','Билирубин общий',['билирубин общий','общий билирубин','tbil'],'мкмоль/л','bio',[3.4,20.5],[3.4,20.5],'Продукт распада гемоглобина, выводится печенью.'],
  ['DBIL','Билирубин прямой',['билирубин прямой','прямой билирубин','билирубин связанный','dbil'],'мкмоль/л','bio',[N,5],[N,5],'Часть билирубина, обработанная печенью.'],
  ['CREA','Креатинин',['креатинин','crea'],'мкмоль/л','bio',[62,106],[44,80],'Показатель работы почек.'],
@@ -537,7 +544,7 @@ const CATALOG=[
  ['ALB','Альбумин',['альбумин','alb'],'г/л','bio',[35,52],[35,52],'Основной белок крови, вырабатывается печенью.'],
  ['FERR','Ферритин',['ферритин'],'нг/мл','iron',[20,250],[10,120],'Запас железа в организме.'],
  ['FE','Железо',['железо сывороточное','железо в сыворотке','железо'],'мкмоль/л','iron',[11.6,31.3],[9,30.4],'Железо в крови прямо сейчас; колеблется в течение дня.'],
- ['VITD','Витамин D',['25-oh витамин d','25(oh)d','витамин d','25-гидроксивитамин','кальциферол'],'нг/мл','iron',[30,100],[30,100],'Важен для костей и иммунитета. Ниже 30 — недостаток.'],
+ ['VITD','Витамин D',['25-oh витамин d','25(oh)d','25(oh) d','витамин 25','витамин d','25-гидроксивитамин','кальциферол'],'нг/мл','iron',[30,100],[30,100],'Важен для костей и иммунитета. Ниже 30 — недостаток.'],
  ['B12','Витамин B12',['витамин b12','цианокобаламин','b12'],'пг/мл','iron',N,N,'Нужен для крови и нервной системы.'],
  ['FOL','Фолиевая кислота',['фолиевая кислота','фолаты'],'нг/мл','iron',N,N,'Витамин B9, нужен для кроветворения.'],
  ['TSH','ТТГ',['тиреотропный гормон','ттг','tsh'],'мМЕ/л','horm',[0.4,4],[0.4,4],'Гормон, который управляет щитовидной железой.'],
@@ -555,8 +562,10 @@ const CATALOG=[
  ['MG','Магний',['магний'],'ммоль/л','elec',[0.66,1.07],[0.66,1.07],'Мышцы и нервная система.']
 ];
 const CAT=Object.fromEntries(CATALOG.map(c=>[c[0],{code:c[0],name:c[1],al:c[2],unit:c[3],grp:c[4],m:c[5],f:c[6],desc:c[7]}]));
-const AL=[];CATALOG.forEach(c=>c[2].forEach(a=>AL.push([a.toLowerCase(),c[0]])));AL.sort((a,b)=>b[0].length-a[0].length);
-const UNITS=[['×10¹²/л',/(?:[x×х*]\s*)?10\s*(?:\^|\*|¹)?\s*(?:12|¹²)\s*\/\s*л/i],['×10⁹/л',/(?:[x×х*]\s*)?10\s*(?:\^|\*)?\s*(?:9|⁹)\s*\/\s*л/i],['мкмоль/л',/мкмоль\s*\/\s*л/i],['ммоль/л',/ммоль\s*\/\s*л/i],['пмоль/л',/пмоль\s*\/\s*л/i],['нмоль/л',/нмоль\s*\/\s*л/i],['мкЕд/мл',/мк\s*(?:ед|ме|u)\s*\/\s*мл/i],['мМЕ/л',/(?:мме|мкме|mu|мед)\s*\/\s*(?:л|мл)/i],['МЕ/мл',/(?:^|[^мк])(?:ме|ед|iu|u)\s*\/\s*мл/i],['Ед/л',/(?:ед|u|е|me)\s*\/\s*л/i],['нг/мл',/(?:нг\s*\/\s*мл|мкг\s*\/\s*л)/i],['пг/мл',/пг\s*\/\s*мл/i],['мг/л',/мг\s*\/\s*л/i],['мг/дл',/мг\s*\/\s*дл/i],['г/л',/(?:^|[^кмн])г\s*\/\s*л/i],['г/дл',/г\s*\/\s*дл/i],['мм/ч',/мм\s*\/\s*ч/i],['фл',/(?:^|\s)фл(?:\s|$)|fl(?:\s|$)/i],['пг',/(?:^|\s)пг(?:\s|$)|pg(?:\s|$)/i],['%',/%/]];
+const normName=x=>' '+String(x||'').toLowerCase().replace(/ё/g,'е').replace(/[-–,.;:]+/g,' ').replace(/\s+/g,' ').trim()+' ';
+const LAT=x=>x.replace(/[аеорсухкмтнв]/g,c=>({а:'a',е:'e',о:'o',р:'p',с:'c',у:'y',х:'x',к:'k',м:'m',т:'t',н:'h',в:'b'})[c]);
+const AL=[];CATALOG.forEach(c=>c[2].forEach(a=>AL.push([normName(a).trim(),c[0]])));AL.sort((a,b)=>b[0].length-a[0].length);
+const UNITS=[['×10⁹/л',/тыс\s*\/\s*мкл/i],['×10¹²/л',/млн\s*\/\s*мкл/i],['×10¹²/л',/(?:[x×х*]\s*)?10\s*(?:\^|\*|¹)?\s*(?:12|¹²)\s*\/\s*л/i],['×10⁹/л',/(?:[x×х*]\s*)?10\s*(?:\^|\*)?\s*(?:9|⁹)\s*\/\s*л/i],['мкмоль/л',/мкмоль\s*\/\s*л/i],['ммоль/л',/ммоль\s*\/\s*л/i],['пмоль/л',/пмоль\s*\/\s*л/i],['нмоль/л',/нмоль\s*\/\s*л/i],['мкЕд/мл',/мк\s*(?:ед|ме|u)\s*\/\s*мл/i],['мМЕ/л',/(?:мме|мкме|mu|мед)\s*\/\s*(?:л|мл)/i],['МЕ/мл',/(?:^|[^мк])(?:ме|ед|iu|u)\s*\/\s*мл/i],['Ед/л',/(?:ед|u|е|me)\s*\/\s*л/i],['нг/мл',/(?:нг\s*\/\s*мл|мкг\s*\/\s*л)/i],['пг/мл',/пг\s*\/\s*мл/i],['мг/л',/мг\s*\/\s*л/i],['мг/дл',/мг\s*\/\s*дл/i],['г/л',/(?:^|[^кмн])г\s*\/\s*л/i],['г/дл',/г\s*\/\s*дл/i],['мм/ч',/мм\s*\/\s*ч/i],['фл',/(?:^|\s)фл(?:\s|$)|fl(?:\s|$)/i],['пг',/(?:^|\s)пг(?:\s|$)|pg(?:\s|$)/i],['%',/%/]];
 const sameUnit=(a,b)=>!a||!b||a.replace(/\s/g,'').toLowerCase()===b.replace(/\s/g,'').toLowerCase()||(/нг\/мл|мкг\/л/i.test(a)&&/нг\/мл|мкг\/л/i.test(b))||(/мме\/л|мкме\/мл|мкед\/мл/i.test(a)&&/мме\/л|мкме\/мл|мкед\/мл/i.test(b));
 const COLORS=['#1f8a85','#3d6fd6','#b04f8f','#d8823a','#6a55c9','#2f9a5c','#c24646','#7a8794'];
 
@@ -589,11 +598,11 @@ function normFor(it,p){let lo=num(it.lo),hi=num(it.hi),src='blank';
 function statusOf(it,p){const v=num(it.value);if(v==null)return '';const n=normFor(it,p);if(n.lo!=null&&v<n.lo)return 'low';if(n.hi!=null&&v>n.hi)return 'high';if(n.lo==null&&n.hi==null)return '';return 'ok';}
 const refTxt=n=>n.lo!=null&&n.hi!=null?fmtN(n.lo)+'–'+fmtN(n.hi):n.hi!=null?'< '+fmtN(n.hi):n.lo!=null?'> '+fmtN(n.lo):'';
 const stLabel={low:'ниже нормы',high:'выше нормы',ok:'в норме','':''};
-const itemKey=it=>it.code||('x:'+String(it.name||'').toLowerCase().replace(/\s+/g,' ').trim());
+const itemKey=it=>it.code||('x:'+(it.grp&&it.grp!=='other'?it.grp+':':'')+String(it.name||'').toLowerCase().replace(/\s+/g,' ').trim());
 function indicatorsOf(pid){const map={};
   testsOf(pid).slice().reverse().forEach(t=>(t.items||[]).forEach(it=>{if(it.value==null||it.value==='')return;const k=itemKey(it);
-    (map[k]=map[k]||{key:k,code:it.code||null,name:it.code&&CAT[it.code]?CAT[it.code].name:it.name,pts:[]}).pts.push({date:t.date,value:it.value,unit:it.unit,lo:it.lo,hi:it.hi,code:it.code,name:it.name,tid:t.id,iid:it.id,lab:t.lab});}));
-  return Object.values(map).map(x=>{x.last=x.pts[x.pts.length-1];x.grp=x.code&&CAT[x.code]?CAT[x.code].grp:'other';return x;});}
+    (map[k]=map[k]||{key:k,code:it.code||null,name:it.code&&CAT[it.code]?CAT[it.code].name:it.name,pts:[]}).pts.push({date:t.date,value:it.value,unit:it.unit,lo:it.lo,hi:it.hi,code:it.code,name:it.name,grp:it.grp,tid:t.id,iid:it.id,lab:t.lab});}));
+  return Object.values(map).map(x=>{x.last=x.pts[x.pts.length-1];x.grp=x.code&&CAT[x.code]?CAT[x.code].grp:(x.last.grp||'other');return x;});}
 
 /* ---------- Хранилище и синхронизация (как в свадебном планере) ---------- */
 const S={db:null,tg:false,timers:{},pending:{}};
@@ -809,6 +818,15 @@ function openAdd(){const p=curP();
    (SY.ready?'':'<p class="note" style="margin:0">Распознавание работает в Telegram после подключения сервера. Сейчас можно ввести показатели вручную.</p>')+
    '<button type="button" class="btn block" data-act="manual">Ввести вручную</button></div>','add');}
 function shrinkImg(file,max,q){return new Promise((res,rej)=>{const url=URL.createObjectURL(file);const im=new Image();im.onload=()=>{let w=im.naturalWidth,h=im.naturalHeight;const k=Math.min(1,max/Math.max(w,h));w=Math.round(w*k);h=Math.round(h*k);const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,w,h);x.drawImage(im,0,0,w,h);URL.revokeObjectURL(url);res(c.toDataURL('image/jpeg',q));};im.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('img'));};im.src=url;});}
+let PDFJS=null;
+function loadPdfJs(){if(PDFJS)return PDFJS;const B='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+  PDFJS=new Promise((res,rej)=>{if(window.pdfjsLib){res(window.pdfjsLib);return;}const sc=document.createElement('script');sc.src=B+'pdf.min.js';
+    sc.onload=()=>{try{window.pdfjsLib.GlobalWorkerOptions.workerSrc=B+'pdf.worker.min.js';res(window.pdfjsLib);}catch(e){rej(e);}};sc.onerror=()=>{PDFJS=null;rej(new Error('pdfjs'));};document.head.appendChild(sc);});return PDFJS;}
+async function pdfPages(file){const lib=await loadPdfJs();const doc=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;const pages=[];
+  for(let n=1;n<=Math.min(doc.numPages,15);n++){const pg=await doc.getPage(n);const tc=await pg.getTextContent();pages.push(tc.items.filter(i=>i.str&&i.str.trim()).map(i=>({s:i.str,x:i.transform[4],y:i.transform[5],w:i.width})));}
+  return pages;}
+function attachFile(upId,file){if(!file)return;if(draft&&draft.upId===upId){draft.file=file;}
+  const t=Object.values(st.tests).find(t=>t.upId===upId);if(t){t.file=file;delete t.upId;persist('a',t.id);}}
 const readAsDataURL=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});
 async function handleBlank(file){const p=curP();
   if(!SY.ready){toast('Распознавание доступно в Telegram после подключения сервера.');return;}
@@ -816,7 +834,13 @@ async function handleBlank(file){const p=curP();
   const t0=Date.now();const tick=setInterval(()=>{const el=$('#rcSec');if(!el){clearInterval(tick);return;}el.textContent=Math.round((Date.now()-t0)/1000)+' с';},1000);
   const stage=t=>{const el=$('#rcStage');if(el)el.textContent=t;};
   try{let data,mime=file.type||'';
-    if(/pdf/i.test(mime)||/\.pdf$/i.test(file.name)){if(file.size>9*1024*1024)throw new Error('big');data=await readAsDataURL(file);mime='application/pdf';}
+    if(/pdf/i.test(mime)||/\.pdf$/i.test(file.name)){if(file.size>9*1024*1024)throw new Error('big');data=await readAsDataURL(file);mime='application/pdf';
+      stage('Читаю PDF…');let res=null;
+      try{const pages=await Promise.race([pdfPages(file),new Promise((_,rj)=>setTimeout(()=>rj(new Error('t')),25000))]);const pl=pdfPagesToLines(pages);
+        res={items:rowsToItems(pl.lines),date:findDate(pl.head),lab:findLab(pl.head+' '+pages.flat().map(i=>i.s).join(' '))};}catch(e){res=null;}
+      if(res&&res.items.length>=3){const upId=uid();res.upId=upId;res.mode='pdf';res.sec=Math.round((Date.now()-t0)/1000);
+        api('file_put',{id:upId,data,name:'Бланк '+(p.name||'')+' '+(res.date||ymd(new Date()))}).then(r=>attachFile(upId,r.file)).catch(()=>toast('Бланк не сохранился на Диск — показатели при этом сохранятся.'));
+        clearInterval(tick);openReview(res);return;}}
     else{data=await shrinkImg(file,1600,.8);mime='image/jpeg';}
     stage(SY.ai?'Отправляю и распознаю нейросетью…':'Отправляю и читаю текст…');
     const id=uid();const r=await api('recognize',{id,data,name:'Бланк '+(p.name||'')+' '+ymd(new Date())});
@@ -826,12 +850,89 @@ async function handleBlank(file){const p=curP();
     if(r.mode==='none')toast('Не удалось прочитать текст. Бланк сохранён — введите показатели вручную.');
     else if(!res.items.length)toast('Показатели не нашлись. Проверьте фото или введите вручную.');
   }catch(e){clearInterval(tick);closeSheet();toast(e.message==='big'?'PDF больше 9 МБ — сделайте фото страниц.':'Не получилось распознать: проверьте интернет и попробуйте ещё раз.');}}
-function matchCode(name){const s=' '+String(name||'').toLowerCase().replace(/ё/g,'е')+' ';
-  for(const [a,code] of AL){const re=new RegExp('(^|[^a-zа-я0-9])'+a.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/ё/g,'е')+'([^a-zа-я0-9]|$)','i');if(re.test(s))return code;}return null;}
-function fromAI(ai){const items=(ai.items||[]).map(x=>{const code=matchCode(x.name);return {id:uid(),code,name:code?CAT[code].name:String(x.name||'').trim(),value:num(x.value)!=null?num(x.value):String(x.value||''),unit:x.unit||(code?CAT[code].unit:''),lo:x.lo==null?'':x.lo,hi:x.hi==null?'':x.hi,ref:x.ref||'',on:true};});
-  return {items,date:/^\d{4}-\d{2}-\d{2}$/.test(ai.date||'')?ai.date:'',lab:ai.lab||''};}
+const ABS_BASE={NEU:1,LYM:1,MON:1,EOS:1,BAS:1};
+function matchCode(name,unit,sec){if(sec==='urine'||sec==='stool')return null;
+  const s=normName(name),s2=LAT(s);let found=null;
+  for(const [a,code] of AL){const re=new RegExp('(^|[^a-zа-я0-9#])'+a.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'([^a-zа-я0-9#]|$)','i');if(re.test(s)||re.test(s2)){found=code;break;}}
+  if(found&&ABS_BASE[found]&&(/абс|abs|#/.test(s)||/10.?9|10⁹|тыс/i.test(unit||'')))found+='_A';
+  return found;}
+/* единицы: приводим к единицам каталога, если знаем коэффициент (г/дл → г/л ×10, тыс/мкл = ×10⁹/л) */
+function toCatUnit(code,unit,vals){const c=CAT[code];const u=String(unit||'').trim();if(!c)return {unit:u,k:1};
+  const fu=(()=>{for(const [lab,re] of UNITS)if(re.test(u))return lab;return u;})();
+  if(c.unit==='г/л'&&fu==='г/дл')return {unit:'г/л',k:10};
+  if(!u)return {unit:c.unit,k:1};
+  return {unit:fu,k:1};}
+function fromAI(ai){const seen={};const items=[];(ai.items||[]).forEach(x=>{const sec=/моч/i.test(x.section||'')?'urine':/кал|копро/i.test(x.section||'')?'stool':'';
+    items.push(mkItem({name:String(x.name||'').trim(),value:x.value,unit:x.unit||'',lo:x.lo,hi:x.hi,ref:x.ref||''},sec,seen));});
+  let date=/^\d{4}-\d{2}-\d{2}$/.test(ai.date||'')?ai.date:'';if(date&&(today()-parseD(date))/864e5>365*15)date='';
+  return {items:items.filter(Boolean),date,lab:ai.lab||''};}
+/* одна строка бланка → показатель */
+const TXTVAL=/^(отриц|не\s*обн|обнаруж|полож|норм|см\.?\s*комм|отсут|незнач|следы|neg|pos)/i;
+const isValTok=v=>{v=String(v||'').trim();return /^[<>≤≥]?\s*-?\d+(?:[.,]\d+)?\s*\*?$/.test(v)||TXTVAL.test(v);};
+function parseRef(r){r=String(r||'').trim();let m;if(/см\.?\s*комм/i.test(r))return {lo:'',hi:'',ref:''};
+  if((m=r.match(/(-?\d+(?:[.,]\d+)?)\s*[-–—]\s*(\d+(?:[.,]\d+)?)/)))return {lo:num(m[1]),hi:num(m[2]),ref:m[0]};
+  if((m=r.match(/(?:[<≤]|до)\s*(\d+(?:[.,]\d+)?)/i)))return {lo:'',hi:num(m[1]),ref:m[0]};
+  if((m=r.match(/(?:[>≥]|от)\s*(\d+(?:[.,]\d+)?)/i)))return {lo:num(m[1]),hi:'',ref:m[0]};
+  return {lo:'',hi:'',ref:r};}
+const cap=t=>{t=String(t||'').trim().toLowerCase();return t?t[0].toUpperCase()+t.slice(1):'';};
+function mkItem(r,sec,seen){let name=String(r.name||'').replace(/\s+/g,' ').replace(/[,\s]+$/,'').trim();if(!name||!/[a-zа-яё]/i.test(name))return null;
+  let v=String(r.value==null?'':r.value).replace(/\*/g,'').trim();
+  if(/^см\.?\s*комм/i.test(v)){v=cap(r.com||(!/\d/.test(r.ref||'')?r.ref:'')||'');if(!r.com)r.ref='';}
+  if(v==='')return null;
+  const code=matchCode(name,r.unit,sec);
+  const rr=(r.lo!=null&&r.lo!==''||r.hi!=null&&r.hi!=='')?{lo:num(r.lo)==null?'':num(r.lo),hi:num(r.hi)==null?'':num(r.hi),ref:r.ref||''}:parseRef(r.ref);
+  let unit=String(r.unit||'').trim(),value=/^[<>≤≥]/.test(v)?v.replace(/\s+/g,''):(num(v)!=null&&/^-?\d+(?:[.,]\d+)?$/.test(v)?num(v):cap(v)),lo=rr.lo,hi=rr.hi;
+  if(code){const cu=toCatUnit(code,unit);if(cu.k!==1){if(typeof value==='number')value=+(value*cu.k).toFixed(3);if(lo!=='')lo=+(lo*cu.k).toFixed(3);if(hi!=='')hi=+(hi*cu.k).toFixed(3);}unit=cu.unit;}
+  const key=code||((sec||'')+':'+name.toLowerCase());if(seen){if(seen[key])return null;seen[key]=1;}
+  return {id:uid(),code,name:code?CAT[code].name:name,value,unit,lo,hi,ref:rr.ref,grp:code?undefined:(sec||undefined),raw:String(r.raw||'').slice(0,90),on:true};}
+const SEC_RE=/^(клинический|общий\s+анализ|общеклинич|биохими|гормон|липидн|липидограм|коагулограм|анализ\s|иммунолог|электролит|онкомаркер|витамины?$|микроэлемент)/i;
+const STOP_RE=/^(исполнитель|\*\s*результат|внимание|подпись|продолжение|перейти|документ результатов|лабораторного тестирования|•|результаты исследований не|www\.|стр\.\s*\d|не является подписью|подтверждает подлинность)/i;
+const secOf=t=>/моч/i.test(t)?'urine':/кал\b|копро/i.test(t)?'stool':'';
+/* строки вида {name,value,unit,ref,com} → показатели; понимает разделы, перенос названия и «см. комм.» */
+function rowsToItems(lines){let sec='',last=null;const out=[];
+  lines.forEach(L=>{if(L.hdr){sec='';last=null;return;}const name=(L.name||'').trim(),val=(L.value||'').trim(),all=[name,val,L.unit,L.ref,L.com].join(' ').trim();if(!all)return;
+    if(STOP_RE.test(name||all)){last=null;return;}
+    if(/^(исследование|наименование|показатель|тест)\b/i.test(name)&&/результат/i.test(all)){last=null;return;}
+    if(name&&!val){
+      if(SEC_RE.test(name)&&!L.unit){sec=secOf(name);last=null;return;}
+      if(last&&!L.unit&&(/^[a-zа-яё%(]/.test(name)||/\)$/.test(name)||/[(,]$/.test(last.name))){last.name+=' '+name;return;}
+      return;}
+    if(!name&&last){if(L.com&&last.needCom&&!last.com)last.com=L.com;return;}
+    if(name&&isValTok(val)){last={name,value:val,unit:L.unit||'',ref:L.ref||'',com:L.com||'',sec,raw:all,needCom:/^см\.?\s*комм/i.test(val)};out.push(last);}
+  });
+  const seen={};return out.map(r=>mkItem(r,r.sec,seen)).filter(Boolean);}
+/* PDF с текстовым слоем: раскладываем текст по колонкам заголовка «Результат / Единицы / Референсные / Комментарий» */
+function pdfPagesToLines(pages){const lines=[];let cols=null;const head=[];
+  pages.forEach((items,pi)=>{const rows=[];items.slice().sort((a,b)=>b.y-a.y||a.x-b.x).forEach(it=>{const r=rows.find(r=>Math.abs(r.y-it.y)<=3);if(r)r.items.push(it);else rows.push({y:it.y,items:[it]});});
+    rows.sort((a,b)=>b.y-a.y);
+    const hr=rows.find(r=>r.items.some(i=>/^результат/i.test(i.s.trim()))&&r.items.length>=2);
+    if(hr){const fx=re=>{const i=hr.items.find(i=>re.test(i.s.trim()));return i?i.x:null;};
+      const xr=fx(/^результат/i),xu=fx(/^ед(иниц|\.)/i),xf=fx(/^(референс|норм|границ)/i),xc=fx(/^коммент/i);
+      cols={xr,xu:xu||xr+60,xf:xf||(xu?xu+60:xr+120),xc:xc||1e9};}
+    if(hr)lines.push({hdr:true});
+    rows.forEach(r=>{const txt=r.items.sort((a,b)=>a.x-b.x).map(i=>i.s).join(' ');
+      if(pi===0&&(!hr||r.y>hr.y))head.push(txt);
+      if(!cols||!hr&&pi===0||hr&&r.y>=hr.y-12)return;
+      const L={name:'',value:'',unit:'',ref:'',com:''};const add=(k,t)=>{L[k]=(L[k]?L[k]+' ':'')+t.trim();};
+      r.items.forEach(i=>{const x=i.x+2;add(x<cols.xr?'name':x<cols.xu?'value':x<cols.xf?'unit':x<cols.xc?'ref':'com',i.s);});
+      lines.push(L);});});
+  return {lines,head:head.join('\n')};}
+function findDate(text){text=String(text||'');let m=text.match(/(?:взяти[яе]|взят|забор[а]?|сдачи|дата\s+анализа|дата\s+исследования)[^\d\n]{0,40}(\d{2})[.\/](\d{2})[.\/](\d{4})/i);
+  if(!m){const all=[...text.matchAll(/(рожд[^\d\n]{0,30})?(\d{2})[.\/](\d{2})[.\/](20\d{2})/gi)].filter(x=>!x[1]);if(all.length)m=[0,all[0][2],all[0][3],all[0][4]];}
+  if(!m)return '';const d=m[3]+'-'+m[2]+'-'+m[1];return isNaN(parseD(d))?'':d;}
+const LABS=['Синэво','Synevo','Инвитро','Invitro','Хеликс','Helix','ЛОДЭ','Lode','Синлаб','Synlab','Гемотест','CMD','Кдл','KDL','Медэкспресс','Нордин','Мой доктор','Амадей'];
+const findLab=t=>LABS.find(l=>new RegExp(l,'i').test(t))||'';
+/* обычный текст (OCR): делим строку на ячейки по табуляции или двум пробелам */
+function textToLines(text){return String(text||'').split(/\r?\n/).map(l=>{const parts=l.split(/\t+|\s{2,}/).map(x=>x.trim()).filter(Boolean);
+    if(parts.length===1){const m=parts[0].match(/^(.*?[a-zа-яё)%][^\d]*?)\s+([<>≤≥]?\s*-?\d+(?:[.,]\d+)?\*?)\s*(.*)$/i);if(m)parts.splice(0,1,m[1],m[2],...(m[3]?[m[3]]:[]));}
+    const L={name:parts[0]||'',value:'',unit:'',ref:'',com:''};let i=1;if(parts[1]!=null&&isValTok(parts[1])){L.value=parts[1];i=2;}
+    for(;i<parts.length;i++){const p=parts[i];if(!L.unit&&!L.ref&&/[a-zа-яё%]/i.test(p)&&p.length<=14&&!/[-–]\s*\d/.test(p)&&!TXTVAL.test(p)&&!/^(см|не)\b/i.test(p))L.unit=p;else if(!L.ref&&(/\d/.test(p)||/^(отриц|не\s*обн|см\.?\s*комм)/i.test(p)))L.ref=p;else L.com=(L.com?L.com+' ':'')+p;}
+    return L;});}
+function parseOCR(text){const a=rowsToItems(textToLines(text));const b=parseOCRold(text).items;const have={};a.forEach(x=>{if(x.code)have[x.code]=1;});
+  const items=a.length>=b.length?a.concat(b.filter(x=>!have[x.code])):b.concat(a.filter(x=>!x.code||!b.some(y=>y.code===x.code)));
+  return {items,date:findDate(text),lab:findLab(text)};}
 /* разбор текста OCR: ищем строки с названием показателя из каталога, рядом — значение, единицы и интервал */
-function parseOCR(text){
+function parseOCRold(text){
   const lines=String(text).replace(/\r/g,'').split('\n').map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean);
   const items=[],seen={};
   const findUnit=s=>{for(const [u,re] of UNITS)if(re.test(s))return u;return '';};
@@ -861,11 +962,12 @@ function parseOCR(text){
   const labs=['Синэво','Synevo','Инвитро','Invitro','Хеликс','Helix','ЛОДЭ','Lode','Синлаб','Synlab','Гемотест','CMD','Кдл','KDL','Медэкспресс','Нордин','Мой доктор'];
   const lab=labs.find(l=>new RegExp(l,'i').test(text))||'';
   return {items,date,lab};}
-function openReview(res){const p=curP();draft={kind:'review',date:res.date||ymd(today()),lab:res.lab||'',note:'',file:res.file||null,items:res.items||[],raw:res.raw||'',mode:res.mode||'manual',sec:res.sec||0,aiError:res.aiError||'',pid:p.id};renderReview();}
+function openReview(res){const p=curP();draft={kind:'review',date:res.date||ymd(today()),lab:res.lab||'',note:'',file:res.file||null,items:res.items||[],raw:res.raw||'',mode:res.mode||'manual',sec:res.sec||0,aiError:res.aiError||'',upId:res.upId||'',pid:p.id};renderReview();}
 function renderReview(){const d=draft;const p=st.profiles[d.pid]||curP();
   const ok=d.items.filter(x=>x.on).length;
   let h=top(d.edit?'Изменить анализ':'Проверьте анализ')+'<div class="stack">';
   if(d.mode==='ocr')h+='<p class="note" style="margin:0">Распознано по тексту бланка'+(d.sec?' за '+d.sec+' с':'')+'. Сверьте цифры с бланком: ошибки распознавания бывают. Снимите галочку с лишнего.'+(d.aiError?'<br>Нейросеть не ответила: '+esc(d.aiError.slice(0,140)):'')+'</p>';
+  if(d.mode==='pdf')h+='<p class="note" style="margin:0">Прочитано из PDF'+(d.sec?' за '+d.sec+' с':'')+'. Сверьте значения с бланком перед сохранением.</p>';
   if(d.mode==='ai')h+='<p class="note" style="margin:0">Распознано нейросетью'+(d.sec?' за '+d.sec+' с':'')+'. Сверьте значения с бланком перед сохранением.</p>';
   h+='<section class="card"><div class="grid2"><div class="fld"><label for="rv-date">Дата анализа</label><input id="rv-date" type="date" data-rv="date" value="'+esc(d.date)+'"></div><div class="fld"><label for="rv-lab">Лаборатория</label><input id="rv-lab" data-rv="lab" value="'+esc(d.lab)+'" placeholder="Например, Синэво"></div></div>'+
      '<div class="fld" style="margin-top:10px"><label>Профиль</label><div class="seg" role="group" style="overflow-x:auto">'+profList().map(x=>'<button type="button" data-rvpid="'+x.id+'" aria-pressed="'+(x.id===d.pid)+'">'+esc(x.name)+'</button>').join('')+'</div></div>'+
@@ -880,15 +982,15 @@ function renderReview(){const d=draft;const p=st.profiles[d.pid]||curP();
   h+='<div class="fld"><label for="rv-note">Заметка</label><textarea id="rv-note" data-rv="note" placeholder="Натощак, после болезни, принимаю препараты…">'+esc(d.note||'')+'</textarea></div>';
   h+='<button type="button" class="btn primary block big-cta" data-act="rvsave">Сохранить анализ</button>'+(d.edit?'<button type="button" class="btn danger block" data-act="deltest">Удалить анализ</button>':'')+'</div>';
   const sc=sheet.hidden?0:sheet.scrollTop;openSheet(h,'review',d.edit||null);sheet.scrollTop=sc;}
-function saveReview(){const d=draft;const items=d.items.filter(x=>x.on&&String(x.name).trim()&&String(x.value).trim()!=='').map(x=>({id:x.id,code:x.code||matchCode(x.name)||null,name:String(x.name).trim(),value:num(x.value)!=null&&/^[<>]?\s*-?\d+([.,]\d+)?\s*$/.test(String(x.value).trim())?num(x.value):String(x.value).trim(),unit:String(x.unit||'').trim(),lo:num(x.lo)==null?'':num(x.lo),hi:num(x.hi)==null?'':num(x.hi)}));
+function saveReview(){const d=draft;const items=d.items.filter(x=>x.on&&String(x.name).trim()&&String(x.value).trim()!=='').map(x=>({id:x.id,code:x.code||(x.grp?null:matchCode(x.name,x.unit))||null,grp:x.code?undefined:(x.grp||undefined),name:String(x.name).trim(),value:num(x.value)!=null&&/^\s*-?\d+([.,]\d+)?\s*$/.test(String(x.value).trim())?num(x.value):String(x.value).trim(),unit:String(x.unit||'').trim(),lo:num(x.lo)==null?'':num(x.lo),hi:num(x.hi)==null?'':num(x.hi)}));
   if(!items.length){toast('Нет ни одного показателя со значением.');return;}
   const id=d.edit||uid();const old=st.tests[id]||{};
-  st.tests[id]={id,pid:d.pid,date:d.date||ymd(today()),lab:String(d.lab||'').trim(),note:d.note||'',file:d.file||null,items,created:old.created||Date.now(),by:SY.me?SY.me.name:''};
+  st.tests[id]={id,pid:d.pid,date:d.date||ymd(today()),lab:String(d.lab||'').trim(),note:d.note||'',file:d.file||null,upId:d.file?undefined:(d.upId||undefined),items,created:old.created||Date.now(),by:SY.me?SY.me.name:''};
   persist('a',id);setCur(d.pid);draft=null;closeSheet();tab='home';render();haptic('ok');toast('Анализ сохранён: '+items.length+' '+plural(items.length,'показатель','показателя','показателей')+'.');}
 function openTest(id){const t=st.tests[id];if(!t)return;const p=st.profiles[t.pid]||curP();
   let h=top(fmtD(t.date),SY.ro?'':'<button type="button" class="iconbtn" data-edittest="'+id+'" aria-label="Изменить"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>')+'<div class="stack"><div class="small muted">'+esc(p?p.name:'')+(t.lab?' · '+esc(t.lab):'')+'</div>';
   if(t.file)h+='<div class="row"><button type="button" class="btn sm" data-viewfile="'+esc(t.file.id)+'">'+ICON.doc.replace('<svg','<svg width="16" height="16" style="stroke:currentColor;fill:none;stroke-width:2"')+'Бланк</button></div>';
-  const groups={};(t.items||[]).forEach(it=>{const g=it.code&&CAT[it.code]?CAT[it.code].grp:'other';(groups[g]=groups[g]||[]).push(it);});
+  const groups={};(t.items||[]).forEach(it=>{const g=it.code&&CAT[it.code]?CAT[it.code].grp:(it.grp||'other');(groups[g]=groups[g]||[]).push(it);});
   GROUPS.forEach(([g,gn])=>{if(!groups[g])return;h+='<section class="card"><div class="h"><h2>'+gn+'</h2></div><div class="list">'+groups[g].map(it=>itemRow(it,p)).join('')+'</div></section>';});
   if(t.note)h+='<section class="card"><div class="small" style="color:var(--txt-2)">'+esc(t.note)+'</div></section>';
   h+='<p class="note" style="margin:0">* Типичная норма для взрослых, если на бланке нет своей.</p></div>';
@@ -1029,6 +1131,7 @@ function crashScreen(err){if(document.getElementById('crash'))return;const el=do
   el.querySelector('#crashReset').onclick=()=>{try{['health-v1','health-pending'].forEach(k=>localStorage.removeItem(k));}catch(e){}location.reload();};}
 const _render=render;render=function(){try{_render();}catch(e){crashScreen(e);}};
 window.addEventListener('error',e=>{if(e&&e.message&&/Script error/.test(e.message))return;if(!view.innerHTML.trim())crashScreen(e.error||e.message);});
+window.__h={get draft(){return draft},get st(){return st}};
 try{loadLocal();}catch(e){st=normalize({});}
 render();initStore().catch(crashScreen);
 })();
