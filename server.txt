@@ -25,7 +25,8 @@
 const MAX_AGE_SEC = 30 * 24 * 3600; // сколько живёт подпись Telegram
 const HISTORY_MAX = 5000;        // сколько прошлых версий хранить
 const BACKUP_KEEP = 40;          // сколько резервных копий хранить
-const SERVER_VERSION = 12; // v12: быстрее — чтение без очереди (блокировка только для записи), hello сразу отдаёт изменения с прошлого входа
+const SERVER_VERSION = 13; // v13: у каждого друга своя папка «Имя» и своя таблица данных; копии личных серверов — туда же
+// v12: v12: быстрее — чтение без очереди (блокировка только для записи), hello сразу отдаёт изменения с прошлого входа
 // v11: v11: общая библиотека продуктов и рецептов с авторами; здоровье в ленте близких (по желанию)
 // v10: v10: родные и друзья по приглашению (у каждого своё пространство), личный сервер с резервной копией у владельца, лента прогресса с реакциями
 // v9: v9: быстрый режим Gemini (minimal thinking) для всех распознаваний, несколько блюд на одном фото
@@ -105,6 +106,7 @@ function resetAccess() {
 function dailyBackup() {
   snapshot_('авто', true); try { appCopy_(); } catch (e) {}
   if (isClone_()) { try { mirrorRetry_(); } catch (e) {} return; }
+  try { tenantBackups_(); } catch (e) {}
   try { const f = foodDbFile_(); if (!f || Date.now() - f.getLastUpdated().getTime() > 14 * 864e5) foodDbBuild_(); } catch (e) {} // база продуктов раз в 2 недели
 }
 
@@ -113,7 +115,7 @@ function readableBook_() {
   const p = PropertiesService.getScriptProperties();
   if (CUR && CUR.tenant) {
     let t = null; if (CUR.readable) { try { t = SpreadsheetApp.openById(CUR.readable); } catch (e) {} }
-    if (!t) { t = SpreadsheetApp.create('Метрика — ' + CUR.name + ' (читаемая таблица)'); DriveApp.getFileById(t.getId()).moveTo(tenantFolder_(CUR)); const m = members_(); const r = m.list.find(x => x.id === CUR.id); if (r) { r.readable = t.getId(); saveMembers_(m); } CUR.readable = t.getId(); }
+    if (!t) { t = SpreadsheetApp.create('Метрика — все данные · ' + tenantLabel_(CUR)); DriveApp.getFileById(t.getId()).moveTo(tenantFolder_(CUR)); const m = members_(); const r = m.list.find(x => x.id === CUR.id); if (r) { r.readable = t.getId(); saveMembers_(m); } CUR.readable = t.getId(); }
     return t;
   }
   let id = p.getProperty('READABLE_ID'), ss = null;
@@ -145,6 +147,7 @@ function readablePut_(req) {
     if (sh.freezeCols) t.setFrozenColumns(sh.freezeCols);
   });
   if (CUR && CUR.tenant) return { ok: true, url: ss.getUrl(), id: ss.getId() };
+  if (isClone_()) { const P0 = PropertiesService.getScriptProperties(); if (P0.getProperty('HUB_URL')) hubCall_(P0.getProperty('HUB_URL'), { op: 'mirror_readable', mkey: P0.getProperty('HUB_KEY'), sheets: req.sheets || [] }); }
   // технические данные для восстановления
   const P = PropertiesService.getScriptProperties();
   let tech = ss.getSheetByName('Технические данные'); if (!tech) tech = ss.insertSheet('Технические данные');
@@ -187,7 +190,7 @@ const WRITE_OPS = /^(push|join|plan|invite_new|invite_del|approve|deny|role|kick
 function doPost(e) {
   let req;
   try { req = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, err: 'bad_json' }); }
-  if (/^(verify|mirror_push|mirror_pull|mirror_file|hub_feed|hub_react|hub_lib)$/.test(req.op || '')) { try { return out_(hubApi_(req)); } catch (err) { return out_({ ok: false, err: 'server', msg: String(err) }); } }
+  if (/^(verify|mirror_push|mirror_pull|mirror_file|mirror_readable|hub_feed|hub_react|hub_lib)$/.test(req.op || '')) { try { return out_(hubApi_(req)); } catch (err) { return out_({ ok: false, err: 'server', msg: String(err) }); } }
   if (req.op === 'link') { try { return out_(link_(req)); } catch (err) { return out_({ ok: false, err: 'server', msg: String(err) }); } }
   const user = auth_(req.initData);
   if (!user) return out_({ ok: false, err: 'auth' });
@@ -216,7 +219,7 @@ function doPost(e) {
         if (code) { const inv = invites_().find(x => x.code === code && !x.used); if (inv) invite = { code: inv.code, name: inv.name, from: (m.list.find(x => x.owner) || {}).name || '' }; else invite = { bad: true }; }
       }
       return out_({ ok: true, member: !!me, owner: !!(me && me.owner), role: me ? roleOf_(me) : '', joined: joined, pending: pending, blocked: !me && isBlocked, private: !me && !isBlocked && priv,
-        pull: me && req.since != null ? pull_(+req.since || 0, nsOf_(me)) : undefined,
+        pull: me && req.since != null ? pull_(+req.since || 0, me.tenant ? me : null) : undefined,
         tenant: !!(me && me.tenant), plan: me && me.tenant ? me.plan : '', mkey: me && me.tenant ? me.mkey : '', hub: !isClone_(), personal: isClone_(), invite: invite,
         you: { id: user.id, name: user.name }, members: me ? (me.tenant ? [me] : m.list.map(pubMember_)) : [], requests: me && me.owner ? requests_() : [], ai: !!PropertiesService.getScriptProperties().getProperty('GEMINI_KEY'), now: Date.now() });
     }
@@ -234,8 +237,8 @@ function doPost(e) {
     // долгие внешние запросы — без блокировки, чтобы не задерживать синхронизацию
     if (req.op === 'off' || req.op === 'food_read' || req.op === 'fooddb') { try { lock.releaseLock(); } catch (e3) {} return out_(req.op === 'off' ? off_(req) : req.op === 'fooddb' ? foodDb_(req) : foodRead_(req)); }
     switch (req.op) {
-      case 'pull':  return out_(pull_(+req.since || 0, nsOf_(me)));
-      case 'push':  return out_(push_(req.docs || [], user, !!me.owner || !!me.tenant, nsOf_(me)));
+      case 'pull':  return out_(pull_(+req.since || 0, me.tenant ? me : null));
+      case 'push':  return out_(push_(req.docs || [], user, !!me.owner || !!me.tenant, me.tenant ? me : null));
       case 'plan': {
         if (!me.tenant) return out_({ ok: false, err: 'not_tenant' });
         me.plan = req.plan === 'own' ? 'own' : 'hub'; saveMembers_(m); return out_({ ok: true, plan: me.plan, mkey: me.mkey });
@@ -347,8 +350,8 @@ function doPost(e) {
 }
 
 /* ---------- данные ---------- */
-function pull_(since, ns) {
-  const sh = sheet_();
+function pull_(since, rec) {
+  const sh = dataSheet_(rec);
   const n = sh.getLastRow();
   const docs = [];
   if (n > 1) {
@@ -356,27 +359,28 @@ function pull_(since, ns) {
     rows.forEach(r => {
       const at = +r[2] || 0;
       const k = String(r[0] || ''); if (!k || at <= since) return;
-      if (ns) { if (k.indexOf(ns + '~') !== 0) return; } else if (k.indexOf('~') >= 0) return;   // чужие пространства не отдаём
-      docs.push({ key: ns ? k.slice(ns.length + 1) : k, body: r[1] ? JSON.parse(r[1]) : null, at: at, by: r[3] });
+      if (k.indexOf('~') >= 0) return;   // старые записи друзей в основной таблице (до переноса) не отдаём
+      docs.push({ key: k, body: r[1] ? JSON.parse(r[1]) : null, at: at, by: r[3] });
     });
   }
   return { ok: true, docs: docs, now: Date.now() };
 }
 
-function rows_() {
-  const sh = sheet_();
+function rows_(rec) {
+  const sh = dataSheet_(rec);
   const n = sh.getLastRow();
   return n > 1 ? sh.getRange(2, 1, n - 1, 4).getValues().map(r => [String(r[0]), String(r[1] || ''), +r[2] || 0, String(r[3] || '')]) : [];
 }
 
-function push_(docs, user, isOwner, ns, raw, noMirror) {
-  const sh = sheet_();
-  const rows = rows_();
+function push_(docs, user, isOwner, rec, raw, noMirror) {
+  if (!rec || !rec.tenant) rec = null;
+  const sh = dataSheet_(rec);
+  const rows = rows_(rec);
   const idx = {}; rows.forEach((r, i) => { idx[r[0]] = i; });
   const now = Date.now();
   const append = [], hist = [], log = [];
   const clean = docs.filter(d => d && d.key && (raw ? /^(t\d+~)?(cfg|[padfms]_[\w-]+)$/ : /^(cfg|[padfms]_[\w-]+)$/).test(d.key))
-    .map(d => ns ? { key: ns + '~' + d.key, body: d.body } : d);
+
   // защита от массового удаления: участникам нельзя стереть много за раз
   if (!isOwner) {
     let dels = 0;
@@ -393,20 +397,21 @@ function push_(docs, user, isOwner, ns, raw, noMirror) {
       const old = rows[i];
       if (old[1] === json) return;                       // ничего не изменилось
       if (old[1]) hist.push([old[0], old[1], old[2], old[3], now, user.name]);   // прошлая версия — в историю
-      if (!ns && d.key.indexOf('~') < 0) logPush_(log, now, user.name, d.key, old[1], json);
+      if (!rec && d.key.indexOf('~') < 0) logPush_(log, now, user.name, d.key, old[1], json);
       sh.getRange(i + 2, 1, 1, 4).setValues([row]);
       rows[i] = row;
-    } else { append.push(row); idx[d.key] = rows.length; rows.push(row); if (json && !ns && d.key.indexOf('~') < 0) logPush_(log, now, user.name, d.key, '', json); }
+    } else { append.push(row); idx[d.key] = rows.length; rows.push(row); if (json && !rec && d.key.indexOf('~') < 0) logPush_(log, now, user.name, d.key, '', json); }
   });
   if (log.length) { const lg = log_(); lg.getRange(lg.getLastRow() + 1, 1, log.length, 5).setValues(log); }
   if (append.length) sh.getRange(sh.getLastRow() + 1, 1, append.length, 4).setValues(append);
   if (hist.length) {
-    const h = history_();
+    const h = history_(rec);
     h.getRange(h.getLastRow() + 1, 1, hist.length, 6).setValues(hist);
     const extra = h.getLastRow() - 1 - HISTORY_MAX;
     if (extra > 200) h.deleteRows(2, extra);
   }
-  if (!noMirror && !ns && isClone_()) mirrorOut_(clean.map(d => d.key));
+  if (!isClone_()) { try { indexDocs_(user.id, clean); } catch (e) {} }
+  if (!noMirror && !rec && isClone_()) mirrorOut_(clean.map(d => d.key));
   return { ok: true, now: now };
 }
 
@@ -834,7 +839,7 @@ function join_(m, me, user, req) {
   const invs = invites_(); const inv = invs.find(x => x.code === code && !x.used);
   if (!inv) return { ok: false, err: 'bad_invite' };
   const rec = { id: user.id, name: user.name, owner: false, role: 'editor', tenant: true, plan: req.plan === 'own' ? 'own' : 'hub', mkey: Utilities.getUuid(), at: Date.now(), invited: inv.name };
-  m.list.push(rec); tenantFolder_(rec); saveMembers_(m);
+  m.list.push(rec); tenantFolder_(rec); saveMembers_(m); try { tenantSS_(rec); } catch (e) {}
   inv.used = user.id; inv.usedAt = Date.now(); saveInvites_(invs);
   const owner = m.list.find(x => x.owner);
   if (owner) { try { tg_('sendMessage', { chat_id: owner.id, text: '«Метрика»: ' + user.name + ' (' + inv.name + ') подключился — ' + (rec.plan === 'own' ? 'личный сервер.' : 'простой вариант.') }); } catch (e) {} }
@@ -842,15 +847,90 @@ function join_(m, me, user, req) {
 }
 function familyRoot_() {
   const P = PropertiesService.getScriptProperties(); const id = P.getProperty('FAMILY_FOLDER_ID');
-  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
-  const par = folder_().getParents(); const f = (par.hasNext() ? par.next() : DriveApp.getRootFolder()).createFolder('Метрика — родные и друзья');
+  if (id) { try { const f0 = DriveApp.getFolderById(id); if (f0.getName() === 'Метрика — родные и друзья') f0.setName('Метрика — друзья'); return f0; } catch (e) {} }
+  const par = folder_().getParents(); const f = (par.hasNext() ? par.next() : DriveApp.getRootFolder()).createFolder('Метрика — друзья');
   P.setProperty('FAMILY_FOLDER_ID', f.getId()); return f;
 }
+function tenantLabel_(rec) { return cleanName_(rec.name + (rec.invited && rec.invited !== rec.name ? ' (' + rec.invited + ')' : '')) || ('id' + rec.id); }
 function tenantFolder_(rec) {
   if (rec.folder) { try { return DriveApp.getFolderById(rec.folder); } catch (e) {} }
-  const f = familyRoot_().createFolder(cleanName_(rec.name) || ('id' + rec.id)); rec.folder = f.getId();
+  const f = familyRoot_().createFolder(tenantLabel_(rec)); rec.folder = f.getId();
   const m = members_(); const r = m.list.find(x => x.id === rec.id); if (r && r !== rec) { r.folder = rec.folder; saveMembers_(m); }
   return f;
+}
+
+/* ---------- у каждого друга своя таблица данных в его папке ---------- */
+function dataSS_(rec) { return rec && rec.tenant ? tenantSS_(rec) : sheet_().getParent(); }
+function dataSheet_(rec) { const ss = dataSS_(rec); return ss.getSheetByName('data') || ss.getSheets()[0]; }
+const SS_CACHE = {};
+function tenantSS_(rec) {
+  if (rec.sheet && SS_CACHE[rec.sheet]) return SS_CACHE[rec.sheet];
+  if (rec.sheet) { try { SS_CACHE[rec.sheet] = SpreadsheetApp.openById(rec.sheet); return SS_CACHE[rec.sheet]; } catch (e) {} }
+  const ss = SpreadsheetApp.create('Метрика — данные · ' + tenantLabel_(rec));
+  const sh0 = ss.getSheets()[0]; sh0.setName('data');
+  sh0.getRange(1, 1, 1, 4).setValues([['key', 'json', 'updatedAt', 'by']]).setFontWeight('bold'); sh0.setFrozenRows(1);
+  const folder = tenantFolder_(rec);
+  try { DriveApp.getFileById(ss.getId()).moveTo(folder); } catch (e) {}
+  try { if (folder.getName() !== tenantLabel_(rec)) folder.setName(tenantLabel_(rec)); } catch (e) {}
+  rec.sheet = ss.getId(); SS_CACHE[rec.sheet] = ss;
+  const m = members_(); const r = m.list.find(x => x.id === rec.id); if (r) { r.sheet = rec.sheet; r.folder = rec.folder; saveMembers_(m); }
+  // перенос старых записей этого человека из основной таблицы (версии 10–12)
+  const pre = 't' + rec.id + '~'; const main = sheet_(); const all = rows_(null);
+  const mine = all.filter(r => r[0].indexOf(pre) === 0).map(r => [r[0].slice(pre.length), r[1], r[2], r[3]]);
+  if (mine.length) {
+    sh0.getRange(2, 1, mine.length, 4).setValues(mine);
+    const keep = all.filter(r => r[0].indexOf(pre) !== 0);
+    main.getRange(2, 1, Math.max(1, main.getLastRow() - 1), 4).clearContent();
+    if (keep.length) main.getRange(2, 1, keep.length, 4).setValues(keep);
+  }
+  return ss;
+}
+/* общий указатель: сводки прогресса и общие продукты всех — чтобы лента и библиотека не открывали все таблицы */
+function indexSheet_(name, head) {
+  const ss = sheet_().getParent(); let s = ss.getSheetByName(name);
+  if (!s) { s = ss.insertSheet(name); s.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold'); s.setFrozenRows(1); }
+  return s;
+}
+function indexDocs_(memberId, docs) {
+  const sums = docs.filter(d => d.key === 's_me'), foods = docs.filter(d => /^m_/.test(d.key));
+  if (!sums.length && !foods.length) return;
+  const now = Date.now();
+  if (sums.length) upsertIndex_(indexSheet_('summaries', ['member', 'json', 'at']), [[memberId, sums[sums.length - 1].body ? JSON.stringify(sums[sums.length - 1].body) : '', now]], 1);
+  if (foods.length) upsertIndex_(indexSheet_('library', ['id', 'member', 'json', 'at']), foods.map(d => [memberId + ':' + d.key, memberId, d.body ? JSON.stringify(d.body) : '', now]), 1);
+}
+function upsertIndex_(sh, rows, keyCols) {
+  const n = sh.getLastRow(); const w = rows[0].length;
+  const cur = n > 1 ? sh.getRange(2, 1, n - 1, w).getValues() : [];
+  const idx = {}; cur.forEach((r, i) => { idx[String(r[0])] = i; });
+  const add = [];
+  rows.forEach(r => { const i = idx[String(r[0])]; if (i !== undefined) sh.getRange(i + 2, 1, 1, w).setValues([r]); else { add.push(r); idx[String(r[0])] = cur.length + add.length - 1; } });
+  if (add.length) sh.getRange(sh.getLastRow() + 1, 1, add.length, w).setValues(add);
+}
+function indexRows_(name, w) { const ss = sheet_().getParent(); const s = ss.getSheetByName(name); if (!s) return []; const n = s.getLastRow(); return n > 1 ? s.getRange(2, 1, n - 1, w).getValues() : []; }
+/* один раз собрать указатель из всех таблиц (после обновления сервера) */
+function ensureIndex_() {
+  const P = PropertiesService.getScriptProperties(); if (P.getProperty('INDEX_V13')) return;
+  const m = members_();
+  m.list.forEach(x => {
+    try {
+      const rec = x.tenant ? x : null; if (rec) tenantSS_(rec);
+      const docs = rows_(rec).filter(r => r[0] === 's_me' || /^m_/.test(r[0])).map(r => ({ key: r[0], body: r[1] ? JSON.parse(r[1]) : null }));
+      if (docs.length) indexDocs_(x.id, docs);
+    } catch (e) {}
+  });
+  P.setProperty('INDEX_V13', '1');
+}
+/* ночная копия таблицы каждого друга в его папку */
+function tenantBackups_() {
+  members_().list.filter(x => x.tenant && x.sheet).forEach(x => {
+    try {
+      const rows = rows_(x); if (!rows.length) return;
+      const folder = tenantFolder_(x); let bf; const it = folder.getFoldersByName('резервные копии'); bf = it.hasNext() ? it.next() : folder.createFolder('резервные копии');
+      bf.createFile('Копия ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd') + '.json', JSON.stringify({ app: 'health', v: 1, who: tenantLabel_(x), at: Date.now(), rows: rows }), 'application/json');
+      const files = []; const fi = bf.getFiles(); while (fi.hasNext()) files.push(fi.next());
+      files.sort((a, b) => b.getDateCreated() - a.getDateCreated()).slice(15).forEach(f => f.setTrashed(true));
+    } catch (e) {}
+  });
 }
 
 /* ---------- основной сервер: запросы от личных серверов (по ключу участника) ---------- */
@@ -861,9 +941,10 @@ function hubApi_(req) {
     const m = members_(); const rec = m.list.find(x => x.mkey && x.mkey === String(req.mkey || ''));
     if (!rec) return { ok: false, err: 'bad_key' };
     if (req.op === 'verify') { const u = auth_(req.initData); if (!u || u.id !== rec.id) return { ok: false, err: 'auth' }; rec.linkedAt = rec.linkedAt || Date.now(); saveMembers_(m); return { ok: true, user: u }; }
-    CUR = rec; const ns = 't' + rec.id;
-    if (req.op === 'mirror_push') { const r = push_(req.docs || [], { id: rec.id, name: rec.name }, true, ns, false, true); rec.mirrorAt = Date.now(); saveMembers_(m); return r; }
-    if (req.op === 'mirror_pull') return pull_(+req.since || 0, ns);
+    CUR = rec;
+    if (req.op === 'mirror_push') { const r = push_(req.docs || [], { id: rec.id, name: rec.name }, true, rec, false, true); const m2 = members_(); const r2 = m2.list.find(x => x.id === rec.id); if (r2) { r2.mirrorAt = Date.now(); saveMembers_(m2); } return r; }
+    if (req.op === 'mirror_pull') return pull_(+req.since || 0, rec);
+    if (req.op === 'mirror_readable') return readablePut_(req);
     if (req.op === 'mirror_file') {
       const mm = String(req.data || '').match(/^data:([\w\/+.-]+);base64,(.+)$/); if (!mm) return { ok: false, err: 'bad_data' };
       const f = tenantFolder_(rec); const name = cleanName_(req.name) || ('file ' + Date.now());
@@ -950,10 +1031,11 @@ function social_() {
   return s;
 }
 function feed_(me) {
-  const m = members_(); const rows = rows_(); const byKey = {}; rows.forEach(r => { byKey[r[0]] = r[1]; });
+  ensureIndex_();
+  const m = members_(); const byId = {}; indexRows_('summaries', 3).forEach(r => { byId[String(r[0])] = String(r[1] || ''); });
   const people = [];
   m.list.forEach(x => {
-    const k = x.owner ? 's_me' : 't' + x.id + '~s_me'; const raw = byKey[k]; if (!raw) return;
+    const raw = byId[String(x.id)]; if (!raw) return;
     let s = null; try { s = JSON.parse(raw).s; } catch (e) {} if (!s || s.share === false) return;
     people.push({ id: x.id, name: s.name || x.name, me: x.id === me.id, s: s });
   });
@@ -963,15 +1045,16 @@ function feed_(me) {
 }
 /* общая библиотека: продукты и рецепты всех участников (кроме скрытых автором) */
 function lib_(me, req) {
-  const since = +req.since || 0; const m = members_(); const names = {}; let ownerId = 0;
-  m.list.forEach(x => { names[x.owner ? '' : 't' + x.id] = { id: x.id, name: x.name }; if (x.owner) ownerId = x.id; });
-  const mine = me.owner ? '' : 't' + me.id; const items = [];
-  rows_().forEach(r => {
-    const k = r[0]; const mm = k.match(/^(?:(t\d+)~)?m_([\w-]+)$/); if (!mm) return;
-    const ns = mm[1] || ''; if (ns === mine || !names[ns]) return; if (+r[2] <= since) return;
-    let body = null; try { body = r[1] ? JSON.parse(r[1]).m : null; } catch (e) {}
-    if (!body || body.shared === false || body.from) { items.push({ key: k, del: true, at: +r[2] }); return; }   // скрытые и чужие копии не раздаём
-    items.push({ key: k, at: +r[2], author: names[ns].name, authorId: names[ns].id, m: body });
+  ensureIndex_();
+  const since = +req.since || 0; const m = members_(); const names = {};
+  m.list.forEach(x => { names[String(x.id)] = { id: x.id, name: x.name }; });
+  const items = [];
+  indexRows_('library', 4).forEach(r => {
+    const k = String(r[0]), who = String(r[1]), at = +r[3] || 0;
+    if (who === String(me.id) || !names[who] || at <= since) return;
+    let body = null; try { body = r[2] ? JSON.parse(r[2]).m : null; } catch (e) {}
+    if (!body || body.shared === false || body.from) { items.push({ key: k, del: true, at: at }); return; }   // скрытые и чужие копии не раздаём
+    items.push({ key: k, at: at, author: names[who].name, authorId: names[who].id, m: body });
   });
   return { ok: true, items: items, now: Date.now() };
 }
@@ -1005,8 +1088,8 @@ function sheet_() {
   return ss.getSheetByName('data') || ss.getSheets()[0];
 }
 
-function history_() {
-  const ss = sheet_().getParent();
+function history_(rec) {
+  const ss = dataSS_(rec);
   let h = ss.getSheetByName('history');
   if (!h) {
     h = ss.insertSheet('history');
