@@ -1,0 +1,1038 @@
+/**
+ * «Метрика» — сервер мини-приложения для анализов (Google Apps Script).
+ *
+ * Что делает:
+ *  - хранит профиль и анализы в Google Таблице «Метрика — данные»;
+ *  - хранит фото и PDF бланков в папке «Метрика — бланки» на вашем Google Диске;
+ *  - распознаёт бланки: встроенным OCR Google Диска (бесплатно, без ключей) или,
+ *    если задан ключ GEMINI_KEY, нейросетью Gemini (точнее);
+ *  - доступ: ЛИЧНЫЙ. Первый, кто открыл приложение, — владелец; остальным доступ закрыт
+ *    (они видят «Это личное приложение»). Чтобы позже пускать других по запросу,
+ *    добавьте свойство ACCESS = requests — тогда они присылают запрос, а вы подтверждаете;
+ *  - защита: история версий, корзина, журнал изменений, ежедневные резервные копии,
+ *    запрет массового удаления для участников, выгрузка в PDF.
+ *  - каждый запрос проверяется по подписи Telegram (initData) с токеном вашего бота.
+ *
+ * Настройка (один раз):
+ *  1. Настройки проекта → Свойства скрипта → BOT_TOKEN = токен бота из @BotFather.
+ *     Необязательно: ROOT_FOLDER_ID = id папки на Диске (часть ссылки после /folders/);
+ *     GEMINI_KEY = ключ Gemini API (aistudio.google.com) для точного распознавания.
+ *  2. Выполнить функцию setup и разрешить доступ.
+ *  3. «Начать развёртывание» → «Новое развёртывание» → «Веб-приложение»:
+ *     запуск от имени «Я», доступ «Все». Скопировать URL (…/exec).
+ */
+
+const MAX_AGE_SEC = 30 * 24 * 3600; // сколько живёт подпись Telegram
+const HISTORY_MAX = 5000;        // сколько прошлых версий хранить
+const BACKUP_KEEP = 40;          // сколько резервных копий хранить
+const SERVER_VERSION = 10; // v10: родные и друзья по приглашению (у каждого своё пространство), личный сервер с резервной копией у владельца, лента прогресса с реакциями
+// v9: v9: быстрый режим Gemini (minimal thinking) для всех распознаваний, несколько блюд на одном фото
+// v8: v8: чтение цифр штрихкода с фото нейросетью (если сканер не справился)
+// v7: v7: своя база продуктов и брендов из Open Food Facts (русскоязычные и белорусские), поиск через search.openfoodfacts.org
+// v6: дневник питания (f_), свои продукты и рецепты (m_), поиск по штрихкоду в Open Food Facts, чтение этикеток
+// v5: читаемая Google-таблица со всеми данными, копия приложения на Диске
+// v4: // v4: новые файлы — в «Медицина документы», переименование, распознавание файла с Диска
+// v3: // v3: раздел «Обследования» (документы d_*), доступ к папке «Медицина документы»
+const DEFAULT_MED_FOLDER_ID = '1-biyI2PZsidTtBjs5uMkU4WJv6S8MKd9'; // папка с архивом медицинских документов (можно задать свойством MED_FOLDER_ID)
+// v2: быстрее Gemini (без «размышлений»), дата взятия вместо даты рождения, все страницы и разделы
+const DEFAULT_ROOT_FOLDER_ID = '1OTtCAloZZ9WN-0tnTf0TQACklWvjwQel'; // папка «Метрика» на Диске: таблица, бланки и резервные копии
+
+let CUR = null; // кто сейчас работает с сервером (для папок и пространств)
+/* «Личный сервер» родственника: копия этого же кода без BOT_TOKEN. Вход проверяет основной сервер, все изменения копируются туда. */
+function isClone_() { return !PropertiesService.getScriptProperties().getProperty('BOT_TOKEN'); }
+function nsOf_(me) { return me && me.tenant ? 't' + me.id : ''; }
+
+function setup() {
+  const p = PropertiesService.getScriptProperties();
+  if (isClone_()) { setupPersonal_(); return; }
+  const ss = sheet_().getParent();
+  const ph = folder_();
+  const rootId = p.getProperty('ROOT_FOLDER_ID') || DEFAULT_ROOT_FOLDER_ID;
+  if (rootId) {
+    const root = DriveApp.getFolderById(rootId);
+    DriveApp.getFileById(ss.getId()).moveTo(root);
+    ph.moveTo(root);
+    backupFolder_().moveTo(root);
+    Logger.log('Таблица и папки лежат в папке «' + root.getName() + '».');
+  }
+  backupFolder_();
+  history_();
+  log_();
+  if (!ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'dailyBackup')) {
+    ScriptApp.newTrigger('dailyBackup').timeBased().everyDays(1).atHour(4).create();
+    Logger.log('Включена ежедневная резервная копия (около 4:00).');
+  }
+  ScriptApp.getOAuthToken();
+  const me = tg_('getMe', {});
+  Logger.log('Готово. Бот: @' + (me && me.result ? me.result.username : '?') + '. Таблица: ' + SpreadsheetApp.openById(p.getProperty('SHEET_ID')).getUrl());
+}
+
+/* настройка личного сервера: всё создаётся в вашем Google Диске в папке «Метрика» */
+function setupPersonal_() {
+  const p = PropertiesService.getScriptProperties();
+  let root = null; const rid = p.getProperty('ROOT_FOLDER_ID');
+  if (rid) { try { root = DriveApp.getFolderById(rid); } catch (e) {} }
+  if (!root) { root = DriveApp.createFolder('Метрика'); p.setProperty('ROOT_FOLDER_ID', root.getId()); }
+  const ss = sheet_().getParent(); DriveApp.getFileById(ss.getId()).moveTo(root);
+  folder_().moveTo(root); backupFolder_().moveTo(root);
+  if (!p.getProperty('MED_FOLDER_ID')) { const med = root.createFolder('Метрика — документы'); p.setProperty('MED_FOLDER_ID', med.getId()); }
+  history_(); log_();
+  if (!ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'dailyBackup')) ScriptApp.newTrigger('dailyBackup').timeBased().everyDays(1).atHour(4).create();
+  ScriptApp.getOAuthToken();
+  Logger.log('Готово! Всё лежит в папке «Метрика» на вашем Google Диске. Теперь: Развертывание → Новое развертывание → Веб-приложение (выполнять от «Я», доступ «Все») и вставьте адрес в приложение.');
+}
+
+/** Показать в журнале, у кого есть доступ (данные не меняет). */
+function showMembers() {
+  const list = members_().list;
+  Logger.log(list.length ? list.map(x => (x.owner ? 'владелец' : roleOf_(x)) + ': ' + x.name + ' (id ' + x.id + ')').join('\n') : 'Участников пока нет — первый, кто откроет приложение, станет организатором.');
+}
+
+/** Сбросить доступ: участники и приглашения удаляются, данные и фото остаются.
+ *  После этого первым откройте приложение вы — станете владельцем. */
+function resetAccess() {
+  const p = PropertiesService.getScriptProperties();
+  p.deleteProperty('MEMBERS');
+  p.deleteProperty('INVITES');
+  p.deleteProperty('BLOCKED');
+  p.deleteProperty('REQUESTS');
+  Logger.log('Доступ сброшен. Данные на месте. Откройте приложение в Telegram первым — станете владельцем.');
+}
+
+/** Ежедневная копия (запускается сама по расписанию). Можно выполнить вручную. */
+function dailyBackup() {
+  snapshot_('авто', true); try { appCopy_(); } catch (e) {}
+  if (isClone_()) { try { mirrorRetry_(); } catch (e) {} return; }
+  try { const f = foodDbFile_(); if (!f || Date.now() - f.getLastUpdated().getTime() > 14 * 864e5) foodDbBuild_(); } catch (e) {} // база продуктов раз в 2 недели
+}
+
+/* ---------- Читаемая таблица: всё, что внесено, в человеческом виде ---------- */
+function readableBook_() {
+  const p = PropertiesService.getScriptProperties();
+  if (CUR && CUR.tenant) {
+    let t = null; if (CUR.readable) { try { t = SpreadsheetApp.openById(CUR.readable); } catch (e) {} }
+    if (!t) { t = SpreadsheetApp.create('Метрика — ' + CUR.name + ' (читаемая таблица)'); DriveApp.getFileById(t.getId()).moveTo(tenantFolder_(CUR)); const m = members_(); const r = m.list.find(x => x.id === CUR.id); if (r) { r.readable = t.getId(); saveMembers_(m); } CUR.readable = t.getId(); }
+    return t;
+  }
+  let id = p.getProperty('READABLE_ID'), ss = null;
+  if (id) { try { ss = SpreadsheetApp.openById(id); } catch (e) { ss = null; } }
+  if (!ss) {
+    ss = SpreadsheetApp.create('Метрика — все данные (читаемая таблица)');
+    p.setProperty('READABLE_ID', ss.getId());
+    try { const parent = DriveApp.getFileById(sheet_().getParent().getId()).getParents(); if (parent.hasNext()) DriveApp.getFileById(ss.getId()).moveTo(parent.next()); } catch (e) {}
+  }
+  return ss;
+}
+function readablePut_(req) {
+  const ss = readableBook_();
+  const sheets = req.sheets || [];
+  sheets.forEach((sh, n) => {
+    const name = String(sh.name || ('Лист ' + (n + 1))).slice(0, 90);
+    let t = ss.getSheetByName(name);
+    if (!t) t = ss.insertSheet(name, n);
+    t.clear();
+    const rows = (sh.rows || []).filter(r => Array.isArray(r));
+    if (!rows.length) return;
+    const w = rows.reduce((m, r) => Math.max(m, r.length), 0);
+    const data = rows.map(r => { const a = r.slice(0, w).map(v => v == null ? '' : v); while (a.length < w) a.push(''); return a; });
+    t.getRange(1, 1, data.length, w).setValues(data);
+    if (sh.header !== false) { t.setFrozenRows(1); t.getRange(1, 1, 1, w).setFontWeight('bold').setBackground('#dff0ee'); }
+    if (sh.colors) { const bg = data.map((r, i) => r.map(() => sh.colors[i] || null)); t.getRange(1, 1, data.length, w).setFontColors(bg.map(r => r.map(c => c || '#000000'))); }
+    if (sh.widths) sh.widths.forEach((px, i) => { if (px && i < w) t.setColumnWidth(i + 1, px); });
+    if (sh.wrap) t.getRange(1, 1, data.length, w).setWrap(true).setVerticalAlignment('top');
+    if (sh.freezeCols) t.setFrozenColumns(sh.freezeCols);
+  });
+  if (CUR && CUR.tenant) return { ok: true, url: ss.getUrl(), id: ss.getId() };
+  // технические данные для восстановления
+  const P = PropertiesService.getScriptProperties();
+  let tech = ss.getSheetByName('Технические данные'); if (!tech) tech = ss.insertSheet('Технические данные');
+  tech.clear();
+  const rows = [['Что', 'Значение'],
+    ['Обновлено', Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm')],
+    ['Таблица с данными (SHEET_ID)', P.getProperty('SHEET_ID') || ''],
+    ['Папка бланков (FOLDER_ID)', P.getProperty('FOLDER_ID') || ''],
+    ['Папка резервных копий (BACKUP_FOLDER_ID)', P.getProperty('BACKUP_FOLDER_ID') || ''],
+    ['Папка «Медицина документы» (MED_FOLDER_ID)', medFolderId_()],
+    ['Корневая папка (ROOT_FOLDER_ID)', P.getProperty('ROOT_FOLDER_ID') || (isClone_() ? '' : DEFAULT_ROOT_FOLDER_ID)],
+    ['Основной сервер (HUB_URL, для личного сервера)', P.getProperty('HUB_URL') || ''],
+    ['Эта читаемая таблица (READABLE_ID)', ss.getId()],
+    ['ID скрипта Apps Script', ScriptApp.getScriptId()],
+    ['Адрес сервера (/exec)', (function () { try { return ScriptApp.getService().getUrl(); } catch (e) { return ''; } })()],
+    ['Gemini подключён', P.getProperty('GEMINI_KEY') ? 'да' : 'нет'],
+    ['Версия сервера', SERVER_VERSION]];
+  tech.getRange(1, 1, rows.length, 2).setValues(rows); tech.setColumnWidth(1, 320); tech.setColumnWidth(2, 520); tech.getRange(1, 1, 1, 2).setFontWeight('bold');
+  const def = ss.getSheetByName('Sheet1') || ss.getSheetByName('Лист1'); if (def && ss.getSheets().length > 1) { try { ss.deleteSheet(def); } catch (e) {} }
+  return { ok: true, url: ss.getUrl(), id: ss.getId() };
+}
+/* копия приложения (index.html) на Диске — на случай, если пропадёт GitHub */
+function appCopy_() {
+  const url = PropertiesService.getScriptProperties().getProperty('APP_URL') || 'https://yradkin.github.io/metrika/';
+  const r = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) return;
+  const html = r.getContentText();
+  if (html.length < 10000) return;
+  const parent = backupFolder_().getParents(); const folder = parent.hasNext() ? parent.next() : DriveApp.getRootFolder();
+  const name = 'Метрика — копия приложения (index.html)';
+  const it = folder.getFilesByName(name);
+  if (it.hasNext()) it.next().setContent(html); else folder.createFile(name, html, 'text/html');
+}
+
+function doGet() {
+  return out_({ ok: true, app: 'health-sync', v: SERVER_VERSION });
+}
+
+function doPost(e) {
+  let req;
+  try { req = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, err: 'bad_json' }); }
+  if (/^(verify|mirror_push|mirror_pull|mirror_file|hub_feed|hub_react)$/.test(req.op || '')) { try { return out_(hubApi_(req)); } catch (err) { return out_({ ok: false, err: 'server', msg: String(err) }); } }
+  if (req.op === 'link') { try { return out_(link_(req)); } catch (err) { return out_({ ok: false, err: 'server', msg: String(err) }); } }
+  const user = auth_(req.initData);
+  if (!user) return out_({ ok: false, err: 'auth' });
+
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+    const m = members_();
+    let me = m.list.find(x => x.id === user.id);
+
+    if (req.op === 'hello') {
+      let joined = false, pending = false;
+      if (!me && !m.list.length) { me = addMember_(m, user, true); joined = true; }
+      const isBlocked = blocked_().some(b => b.id === user.id);
+      const priv = String(PropertiesService.getScriptProperties().getProperty('ACCESS') || 'private') !== 'requests';
+      if (!me && !isBlocked && !priv) {
+        const rq = requests_();
+        if (!rq.some(x => x.id === user.id)) { rq.push({ id: user.id, name: user.name, at: Date.now() }); saveRequests_(rq); }
+        pending = true;
+      }
+      if (me && (me.name !== user.name)) { me.name = user.name; saveMembers_(m); }
+      let invite = null;
+      if (!me && !isClone_()) {
+        const code = String(req.invite || user.start_param || '').replace(/^inv_/i, '').trim().toUpperCase();
+        if (code) { const inv = invites_().find(x => x.code === code && !x.used); if (inv) invite = { code: inv.code, name: inv.name, from: (m.list.find(x => x.owner) || {}).name || '' }; else invite = { bad: true }; }
+      }
+      return out_({ ok: true, member: !!me, owner: !!(me && me.owner), role: me ? roleOf_(me) : '', joined: joined, pending: pending, blocked: !me && isBlocked, private: !me && !isBlocked && priv,
+        tenant: !!(me && me.tenant), plan: me && me.tenant ? me.plan : '', mkey: me && me.tenant ? me.mkey : '', hub: !isClone_(), personal: isClone_(), invite: invite,
+        you: { id: user.id, name: user.name }, members: me ? (me.tenant ? [me] : m.list.map(pubMember_)) : [], requests: me && me.owner ? requests_() : [], ai: !!PropertiesService.getScriptProperties().getProperty('GEMINI_KEY'), now: Date.now() });
+    }
+
+    if (req.op === 'join') return out_(join_(m, me, user, req));
+    if (!me) return out_({ ok: false, err: 'not_member' });
+    CUR = me;
+    // лента прогресса: на личном сервере — через основной
+    if (req.op === 'feed' || req.op === 'react') {
+      if (isClone_()) { try { lock.releaseLock(); } catch (e3) {} const P = PropertiesService.getScriptProperties(); const r = hubCall_(P.getProperty('HUB_URL'), Object.assign({}, req, { op: req.op === 'feed' ? 'hub_feed' : 'hub_react', mkey: P.getProperty('HUB_KEY'), initData: '' })); return out_(r || { ok: false, err: 'hub_down' }); }
+      return out_(req.op === 'feed' ? feed_(me) : react_(me, req));
+    }
+    if (roleOf_(me) === 'viewer' && /^(push|recognize|file_put|file_del|doc_read|food_read)$/.test(req.op)) return out_({ ok: false, err: 'read_only' });
+
+    // долгие внешние запросы — без блокировки, чтобы не задерживать синхронизацию
+    if (req.op === 'off' || req.op === 'food_read' || req.op === 'fooddb') { try { lock.releaseLock(); } catch (e3) {} return out_(req.op === 'off' ? off_(req) : req.op === 'fooddb' ? foodDb_(req) : foodRead_(req)); }
+    switch (req.op) {
+      case 'pull':  return out_(pull_(+req.since || 0, nsOf_(me)));
+      case 'push':  return out_(push_(req.docs || [], user, !!me.owner || !!me.tenant, nsOf_(me)));
+      case 'plan': {
+        if (!me.tenant) return out_({ ok: false, err: 'not_tenant' });
+        me.plan = req.plan === 'own' ? 'own' : 'hub'; saveMembers_(m); return out_({ ok: true, plan: me.plan, mkey: me.mkey });
+      }
+      case 'invite_new': {
+        if (!me.owner || isClone_()) return out_({ ok: false, err: 'owner_only' });
+        const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let code = ''; for (let i = 0; i < 6; i++) code += abc[Math.floor(Math.random() * abc.length)];
+        const invs = invites_().filter(x => !x.used || Date.now() - (x.usedAt || 0) < 90 * 864e5); invs.push({ code: code, name: String(req.name || '').trim().slice(0, 40) || 'Гость', at: Date.now() }); saveInvites_(invs);
+        return out_({ ok: true, code: code, bot: botName_(), invites: invites_() });
+      }
+      case 'invites': if (!me.owner) return out_({ ok: false, err: 'owner_only' }); return out_({ ok: true, invites: invites_(), bot: botName_(), members: m.list.map(pubMember_) });
+      case 'invite_del': {
+        if (!me.owner) return out_({ ok: false, err: 'owner_only' });
+        saveInvites_(invites_().filter(x => x.code !== req.code)); return out_({ ok: true, invites: invites_() });
+      }
+      case 'recognize': return out_(recognize_(req));
+      case 'file_put': return out_(filePut_(req));
+      case 'file_get': return out_(fileGet_(req));
+      case 'readable_put': if (roleOf_(me) === 'viewer') return out_({ ok: false, err: 'read_only' }); return out_(readablePut_(req));
+      case 'app_copy': if (!me.owner) return out_({ ok: false, err: 'owner_only' }); appCopy_(); return out_({ ok: true });
+      case 'file_rename': { const f = ownFile_(req.fid, true); const n = cleanName_(req.name); if (n) f.setName(n); return out_({ ok: true, name: f.getName() }); }
+      case 'med_rename': {
+        if (!me.owner) return out_({ ok: false, err: 'owner_only' });
+        const done = [];
+        (req.items || []).slice(0, 300).forEach(x => { try { const f = ownFile_(x.id, true); const n = cleanName_(x.name); if (n && f.getName() !== n) { f.setName(n); done.push(x.id); } } catch (e) {} });
+        return out_({ ok: true, renamed: done.length });
+      }
+      case 'med_list': if (!me.owner) return out_({ ok: false, err: 'owner_only' }); return out_(medList_());
+      case 'doc_read': return out_(docRead_(req));
+      case 'file_del': return out_(fileDel_(req));
+      case 'approve': {
+        if (!me.owner) return out_({ ok: false, err: 'owner_only' });
+        const rq = requests_(); const r = rq.find(x => x.id === +req.id);
+        if (r && !m.list.some(x => x.id === r.id)) addMember_(m, r, false, req.role === 'viewer' ? 'viewer' : 'editor');
+        saveRequests_(rq.filter(x => x.id !== +req.id));
+        return out_({ ok: true, members: m.list.map(pubMember_), requests: requests_() });
+      }
+      case 'deny': {
+        if (!me.owner) return out_({ ok: false, err: 'owner_only' });
+        const rq = requests_(); const r = rq.find(x => x.id === +req.id);
+        if (r) { const bl = blocked_().filter(b => b.id !== r.id); bl.push({ id: r.id, name: r.name, at: Date.now() }); saveBlocked_(bl); }
+        saveRequests_(rq.filter(x => x.id !== +req.id));
+        return out_({ ok: true, requests: requests_(), blocked: blocked_() });
+      }
+      case 'role': {
+        if (!me.owner) return out_({ ok: false, err: 'owner_only' });
+        const t = m.list.find(x => x.id === +req.id && !x.owner);
+        if (t) { t.role = req.role === 'viewer' ? 'viewer' : 'editor'; saveMembers_(m); }
+        return out_({ ok: true, members: m.list.map(pubMember_) });
+      }
+      case 'trash':    if (!me.owner) return out_({ ok: false, err: 'owner_only' }); return out_(trash_());
+      case 'versions': if (!me.owner) return out_({ ok: false, err: 'owner_only' }); return out_(versions_(String(req.key || '')));
+      case 'restore': {
+        if (!me.owner) return out_({ ok: false, err: 'owner_only' });
+        const v = findVersion_(String(req.key || ''), +req.at || 0);
+        if (!v) return out_({ ok: false, err: 'not_found' });
+        const r = push_([{ key: req.key, body: v }], user, true);
+        return out_({ ok: true, now: r.now });
+      }
+      case 'backup_now': if (!me.owner) return out_({ ok: false, err: 'owner_only' }); return out_({ ok: true, name: snapshot_('вручную', false) });
+      case 'backups': if (!me.owner) return out_({ ok: false, err: 'owner_only' }); return out_(backups_());
+      case 'restore_backup': {
+        if (!me.owner) return out_({ ok: false, err: 'owner_only' });
+        const file = DriveApp.getFileById(String(req.id || ''));
+        if (file.getParents().next().getId() !== backupFolder_().getId()) return out_({ ok: false, err: 'bad_id' });
+        const snap = JSON.parse(file.getBlob().getDataAsString());
+        snapshot_('перед восстановлением', false);
+        const want = {}; (snap.rows || []).forEach(r => { want[r[0]] = r[1] ? JSON.parse(r[1]) : null; });
+        const cur = rows_().map(r => r[0]);
+        const docs = Object.keys(want).concat(cur.filter(k => !(k in want))).map(k => ({ key: k, body: want[k] || null }));
+        const r = push_(docs, user, true, '', true);
+        return out_({ ok: true, now: r.now });
+      }
+      case 'kick': {
+        if (!me.owner) return out_({ ok: false, err: 'owner_only' });
+        const t = m.list.find(x => x.id === +req.id && !x.owner);
+        if (t) { const bl = blocked_().filter(b => b.id !== t.id); bl.push({ id: t.id, name: t.name, at: Date.now() }); saveBlocked_(bl); }
+        m.list = m.list.filter(x => x.id !== +req.id || x.owner);
+        saveMembers_(m);
+        return out_({ ok: true, members: m.list.map(pubMember_), blocked: blocked_() });
+      }
+      case 'unblock': {
+        if (!me.owner) return out_({ ok: false, err: 'owner_only' });
+        const bl = blocked_(); const b = bl.find(x => x.id === +req.id);
+        saveBlocked_(bl.filter(x => x.id !== +req.id));
+        if (b && !m.list.some(x => x.id === b.id)) addMember_(m, b, false, 'editor');
+        return out_({ ok: true, members: m.list.map(pubMember_), blocked: blocked_() });
+      }
+      case 'blocked': if (!me.owner) return out_({ ok: false, err: 'owner_only' }); return out_({ ok: true, blocked: blocked_(), requests: requests_() });
+      case 'log': if (!me.owner) return out_({ ok: false, err: 'owner_only' }); return out_({ ok: true, items: logRows_(+req.limit || 150) });
+      case 'report_pdf': if (!me.owner) return out_({ ok: false, err: 'owner_only' }); return out_(reportPdf_());
+      case 'pdf': {
+        if (!me.owner && !me.tenant) return out_({ ok: false, err: 'owner_only' });
+        const html = String(req.html || '');
+        if (!html || html.length > 3000000) return out_({ ok: false, err: 'bad_html' });
+        const tz = Session.getScriptTimeZone();
+        const name = String(req.name || 'Метрика').replace(/[\\/:*?"<>|]/g, ' ').slice(0, 80) + ' ' + Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH-mm') + '.pdf';
+        const pdf = HtmlService.createHtmlOutput(html).getBlob().getAs('application/pdf').setName(name);
+        const file = (me.tenant ? tenantFolder_(me) : backupFolder_()).createFile(pdf);
+        return out_({ ok: true, url: file.getUrl(), name: name });
+      }
+      default: return out_({ ok: false, err: 'bad_op' });
+    }
+  } catch (err) {
+    return out_({ ok: false, err: 'server', msg: String(err) });
+  } finally {
+    try { lock.releaseLock(); } catch (e2) {}
+  }
+}
+
+/* ---------- данные ---------- */
+function pull_(since, ns) {
+  const sh = sheet_();
+  const n = sh.getLastRow();
+  const docs = [];
+  if (n > 1) {
+    const rows = sh.getRange(2, 1, n - 1, 4).getValues();
+    rows.forEach(r => {
+      const at = +r[2] || 0;
+      const k = String(r[0] || ''); if (!k || at <= since) return;
+      if (ns) { if (k.indexOf(ns + '~') !== 0) return; } else if (k.indexOf('~') >= 0) return;   // чужие пространства не отдаём
+      docs.push({ key: ns ? k.slice(ns.length + 1) : k, body: r[1] ? JSON.parse(r[1]) : null, at: at, by: r[3] });
+    });
+  }
+  return { ok: true, docs: docs, now: Date.now() };
+}
+
+function rows_() {
+  const sh = sheet_();
+  const n = sh.getLastRow();
+  return n > 1 ? sh.getRange(2, 1, n - 1, 4).getValues().map(r => [String(r[0]), String(r[1] || ''), +r[2] || 0, String(r[3] || '')]) : [];
+}
+
+function push_(docs, user, isOwner, ns, raw, noMirror) {
+  const sh = sheet_();
+  const rows = rows_();
+  const idx = {}; rows.forEach((r, i) => { idx[r[0]] = i; });
+  const now = Date.now();
+  const append = [], hist = [], log = [];
+  const clean = docs.filter(d => d && d.key && (raw ? /^(t\d+~)?(cfg|[padfms]_[\w-]+)$/ : /^(cfg|[padfms]_[\w-]+)$/).test(d.key))
+    .map(d => ns ? { key: ns + '~' + d.key, body: d.body } : d);
+  // защита от массового удаления: участникам нельзя стереть много за раз
+  if (!isOwner) {
+    let dels = 0;
+    clean.forEach(d => { const i = idx[d.key]; if (!d.body && i !== undefined && rows[i][1]) dels++; });
+    if (dels > 3) return { ok: false, err: 'mass_delete' };
+    if (clean.some(d => d.key === 'cfg' && !d.body)) return { ok: false, err: 'mass_delete' };
+  }
+  clean.forEach(d => {
+    const json = d.body ? JSON.stringify(d.body) : '';
+    if (json.length > 49000) throw new Error('too_big:' + d.key);
+    const row = [d.key, json, now, user.name];
+    const i = idx[d.key];
+    if (i !== undefined) {
+      const old = rows[i];
+      if (old[1] === json) return;                       // ничего не изменилось
+      if (old[1]) hist.push([old[0], old[1], old[2], old[3], now, user.name]);   // прошлая версия — в историю
+      if (!ns && d.key.indexOf('~') < 0) logPush_(log, now, user.name, d.key, old[1], json);
+      sh.getRange(i + 2, 1, 1, 4).setValues([row]);
+      rows[i] = row;
+    } else { append.push(row); idx[d.key] = rows.length; rows.push(row); if (json && !ns && d.key.indexOf('~') < 0) logPush_(log, now, user.name, d.key, '', json); }
+  });
+  if (log.length) { const lg = log_(); lg.getRange(lg.getLastRow() + 1, 1, log.length, 5).setValues(log); }
+  if (append.length) sh.getRange(sh.getLastRow() + 1, 1, append.length, 4).setValues(append);
+  if (hist.length) {
+    const h = history_();
+    h.getRange(h.getLastRow() + 1, 1, hist.length, 6).setValues(hist);
+    const extra = h.getLastRow() - 1 - HISTORY_MAX;
+    if (extra > 200) h.deleteRows(2, extra);
+  }
+  if (!noMirror && !ns && isClone_()) mirrorOut_(clean.map(d => d.key));
+  return { ok: true, now: now };
+}
+
+/* ---------- журнал изменений ---------- */
+function log_() {
+  const ss = sheet_().getParent();
+  let l = ss.getSheetByName('log');
+  if (!l) {
+    l = ss.insertSheet('log');
+    l.getRange(1, 1, 1, 5).setValues([['at', 'by', 'key', 'title', 'what']]).setFontWeight('bold');
+    l.setFrozenRows(1);
+  }
+  return l;
+}
+
+function logRows_(limit) {
+  const l = log_(); const n = l.getLastRow();
+  if (n < 2) return [];
+  const from = Math.max(2, n - limit + 1);
+  return l.getRange(from, 1, n - from + 1, 5).getValues().map(r => ({ at: +r[0], by: String(r[1]), key: String(r[2]), title: String(r[3]), what: String(r[4]) })).reverse();
+}
+
+function logPush_(log, now, by, key, oldJson, newJson) {
+  let a = null, b = null;
+  try { a = oldJson ? JSON.parse(oldJson) : null; b = newJson ? JSON.parse(newJson) : null; } catch (e) {}
+  const what = summarize_(key, a, b);
+  if (what) log.push([now, by, key, title_(key, b || a), what]);
+}
+
+function title_(key, body) {
+  if (key === 'cfg') return 'Настройки';
+  if (key.indexOf('p_') === 0) { const p = (body && body.p) || {}; return 'Профиль: ' + (p.name || 'без имени'); }
+  if (key.indexOf('a_') === 0) { const a = (body && body.a) || {}; return 'Анализ ' + (a.date || '') + (a.lab ? ' · ' + a.lab : ''); }
+  if (key.indexOf('d_') === 0) { const d = (body && body.d) || {}; return 'Документ ' + (d.date || '') + (d.title ? ' · ' + d.title : ''); }
+  if (key.indexOf('f_') === 0) return 'Питание ' + key.slice(2);
+  if (key.indexOf('m_') === 0) { const m = (body && body.m) || {}; return (m.kind === 'recipe' ? 'Рецепт: ' : 'Продукт: ') + (m.name || ''); }
+  return key;
+}
+function q_(s) { s = String(s == null ? '' : s); return '«' + (s.length > 40 ? s.slice(0, 40) + '…' : s) + '»'; }
+function byId_(arr) { const o = {}; (arr || []).forEach(x => { if (x && x.id) o[x.id] = x; }); return o; }
+
+function summarize_(key, a, b) {
+  if (key.indexOf('f_') === 0 || key.indexOf('s_') === 0) return '';                 // записи дневника питания в журнал не пишем — их слишком много
+  if (key.indexOf('m_') === 0) return !a && b ? 'добавлен' : a && !b ? 'удалён' : 'изменён';
+  if (!a && b) { if (key.indexOf('a_') === 0) { const n = ((b.a || {}).items || []).length; return 'добавлен анализ: ' + n + ' показател' + (n % 10 === 1 && n % 100 !== 11 ? 'ь' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'я' : 'ей'); } return key.indexOf('p_') === 0 ? 'добавлен профиль' : 'создано'; }
+  if (a && !b) return 'удалено';
+  if (!a || !b) return '';
+  const out = [];
+  if (key.indexOf('a_') === 0) {
+    const x = a.a || {}, y = b.a || {};
+    ['date', 'lab', 'note'].forEach(k => { if ((x[k] || '') !== (y[k] || '')) out.push({ date: 'дата', lab: 'лаборатория', note: 'заметка' }[k] + ': ' + (x[k] || '—') + ' → ' + (y[k] || '—')); });
+    if ((x.pid || '') !== (y.pid || '')) out.push('перенесён в другой профиль');
+    const ix = byId_(x.items), iy = byId_(y.items);
+    Object.keys(iy).forEach(id => { const t = iy[id], o = ix[id];
+      if (!o) out.push('добавлен ' + q_(t.name) + ' ' + (t.value == null ? '' : t.value) + ' ' + (t.unit || ''));
+      else if (String(o.value) !== String(t.value) || (o.unit || '') !== (t.unit || '')) out.push(q_(t.name) + ': ' + o.value + ' → ' + t.value + ' ' + (t.unit || ''));
+      else if (String(o.lo) !== String(t.lo) || String(o.hi) !== String(t.hi)) out.push('норма ' + q_(t.name) + ' изменена'); });
+    Object.keys(ix).forEach(id => { if (!iy[id]) out.push('удалён ' + q_(ix[id].name)); });
+  } else if (key.indexOf('p_') === 0) {
+    const x = b && a ? a.p || {} : {}, y = b.p || {};
+    if ((x.name || '') !== (y.name || '')) out.push('имя ' + q_(x.name) + ' → ' + q_(y.name));
+    if ((x.sex || '') !== (y.sex || '')) out.push('пол изменён');
+    if ((x.birth || '') !== (y.birth || '')) out.push('год рождения: ' + (x.birth || '—') + ' → ' + (y.birth || '—'));
+    if (JSON.stringify(x.remind || {}) !== JSON.stringify(y.remind || {})) out.push('напоминания');
+  } else if (key === 'cfg') out.push('настройки');
+  return out.slice(0, 12).join('; ');
+}
+
+function reportPdf_() {
+  const items = logRows_(3000);
+  const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const tz = Session.getScriptTimeZone();
+  const fmt = t => Utilities.formatDate(new Date(t), tz, 'dd.MM.yyyy HH:mm');
+  let html = '<html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;font-size:10.5pt;color:#1c1426}h1{font-size:18pt;margin:0 0 4px}p.m{color:#6a5a72;margin:0 0 14px}table{width:100%;border-collapse:collapse}th{text-align:left;font-size:9pt;color:#6a5a72;border-bottom:1.5px solid #c9b8d4;padding:5px 6px}td{vertical-align:top;border-bottom:1px solid #eee3f2;padding:5px 6px}td.t{white-space:nowrap;color:#6a5a72;width:92px}td.b{white-space:nowrap;width:90px}td.k{font-weight:bold;width:180px}</style></head><body>';
+  html += '<h1>Журнал изменений — Метрика</h1><p class="m">Сформирован ' + fmt(Date.now()) + ' · записей: ' + items.length + '</p>';
+  html += items.length ? '<table><tr><th>Когда</th><th>Кто</th><th>Что</th><th>Изменения</th></tr>' + items.map(i => '<tr><td class="t">' + fmt(i.at) + '</td><td class="b">' + esc(i.by) + '</td><td class="k">' + esc(i.title) + '</td><td>' + esc(i.what) + '</td></tr>').join('') + '</table>' : '<p>Изменений пока нет.</p>';
+  html += '</body></html>';
+  const name = 'Журнал изменений ' + Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH-mm') + '.pdf';
+  const pdf = HtmlService.createHtmlOutput(html).getBlob().getAs('application/pdf').setName(name);
+  const file = backupFolder_().createFile(pdf);
+  return { ok: true, url: file.getUrl(), name: name };
+}
+
+/* ---------- история, корзина, копии ---------- */
+function historyRows_() {
+  const h = history_();
+  const n = h.getLastRow();
+  return n > 1 ? h.getRange(2, 1, n - 1, 6).getValues().map(r => [String(r[0]), String(r[1] || ''), +r[2] || 0, String(r[3] || ''), +r[4] || 0, String(r[5] || '')]) : [];
+}
+
+function trash_() {
+  const hist = historyRows_();
+  const last = {};
+  hist.forEach(r => { if (r[1]) last[r[0]] = r; });
+  const out = rows_().filter(r => !r[1] && /^(p_|a_|d_|m_)/.test(r[0]) && last[r[0]] && Date.now() - r[2] < 180 * 864e5)
+    .map(r => ({ key: r[0], body: JSON.parse(last[r[0]][1]), at: last[r[0]][2], deletedAt: r[2], by: r[3] }))
+    .sort((a, b) => b.deletedAt - a.deletedAt).slice(0, 60);
+  return { ok: true, items: out };
+}
+
+function versions_(key) {
+  const list = historyRows_().filter(r => r[0] === key && r[1])
+    .map(r => ({ at: r[2], by: r[3], replacedAt: r[4], replacedBy: r[5], body: JSON.parse(r[1]) }))
+    .sort((a, b) => b.at - a.at).slice(0, 20);
+  return { ok: true, items: list };
+}
+
+function findVersion_(key, at) {
+  const r = historyRows_().filter(x => x[0] === key && x[1] && (!at || x[2] === at)).pop();
+  return r ? JSON.parse(r[1]) : null;
+}
+
+function snapshot_(label, skipSame) {
+  const rows = rows_();
+  const json = JSON.stringify({ app: 'health', v: 1, at: Date.now(), rows: rows });
+  const p = PropertiesService.getScriptProperties();
+  const hash = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(rows.map(r => [r[0], r[1]]))));
+  if (skipSame && p.getProperty('LAST_BACKUP_HASH') === hash) return '';
+  const name = 'Копия ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH-mm') + ' (' + label + ').json';
+  const f = backupFolder_();
+  f.createFile(name, json, 'application/json');
+  p.setProperty('LAST_BACKUP_HASH', hash);
+  const files = []; const it = f.getFiles(); while (it.hasNext()) { const x = it.next(); if (/\.json$/.test(x.getName())) files.push(x); }
+  files.sort((a, b) => b.getDateCreated() - a.getDateCreated()).slice(BACKUP_KEEP).forEach(x => x.setTrashed(true));
+  return name;
+}
+
+function backups_() {
+  const files = []; const it = backupFolder_().getFiles(); while (it.hasNext()) { const f = it.next(); if (/\.json$/.test(f.getName())) files.push(f); }
+  return { ok: true, items: files.sort((a, b) => b.getDateCreated() - a.getDateCreated()).slice(0, BACKUP_KEEP)
+    .map(f => ({ id: f.getId(), name: f.getName(), at: f.getDateCreated().getTime(), size: f.getSize() })) };
+}
+
+/* ---------- фото ---------- */
+/* ---------- бланки и распознавание ---------- */
+function saveBlank_(id, dataUrl, name) {
+  const m = String(dataUrl || '').match(/^data:([\w\/+.-]+);base64,(.+)$/);
+  if (!m) return null;
+  if (!/^(image\/|application\/pdf)/.test(m[1])) throw new Error('bad_type');
+  const ext = m[1] === 'application/pdf' ? '.pdf' : '.jpg';
+  const blob = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], (name || id) + ext);
+  let dest = folder_(); try { const mid = medFolderId_(); if (mid) dest = DriveApp.getFolderById(mid); } catch (e) {}
+  if (CUR && CUR.tenant) dest = tenantFolder_(CUR);
+  const f = dest.createFile(blob);
+  f.setDescription('blank:' + id);
+  if (isClone_()) mirrorFile_(f);
+  return { blob: blob, file: f, mime: m[1], b64: m[2] };
+}
+
+function recognize_(req) {
+  if (!/^[\w-]{4,40}$/.test(req.id || '')) return { ok: false, err: 'bad_id' };
+  const t0 = Date.now();
+  let saved;
+  if (req.fid) { const f = ownFile_(req.fid, true); const b = f.getBlob(); saved = { blob: b, file: f, mime: b.getContentType(), b64: Utilities.base64Encode(b.getBytes()) }; }
+  else saved = saveBlank_(req.id, req.data, req.name);
+  if (!saved) return { ok: false, err: 'bad_data' };
+  const out = { ok: true, file: { id: saved.file.getId(), mime: saved.mime, name: saved.file.getName(), med: saved.file.getParents().next().getId() === medFolderId_() } };
+  const key = PropertiesService.getScriptProperties().getProperty('GEMINI_KEY');
+  if (key) {
+    try { out.ai = gemini_(key, saved.b64, saved.mime); out.mode = 'ai'; out.ms = Date.now() - t0; return out; }
+    catch (e) { out.aiError = String(e).slice(0, 300); }
+  }
+  try { out.text = ocr_(saved.blob); out.mode = 'ocr'; }
+  catch (e) { out.mode = 'none'; out.ocrError = String(e).slice(0, 300); }
+  return out;
+}
+
+/* ---------- Gemini: один вызов для всех распознаваний ----------
+   Новые модели (Gemini 3) «размышляют» по умолчанию на высоком уровне — это медленно.
+   Пробуем самый быстрый режим: thinkingLevel=minimal, затем thinkingBudget=0, затем без настройки.
+   Какой режим принят — запоминаем, чтобы не тратить лишние запросы. */
+function geminiJson_(key, prompt, mime, b64, maxTok) {
+  const P = PropertiesService.getScriptProperties();
+  const model = P.getProperty('GEMINI_MODEL') || 'gemini-flash-latest';
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + encodeURIComponent(key);
+  const modes = { level: { thinkingLevel: 'minimal' }, budget: { thinkingBudget: 0 }, none: null };
+  const known = P.getProperty('GEMINI_THINK_' + model);
+  const order = known && modes.hasOwnProperty(known) ? [known] : ['level', 'budget', 'none'];
+  let r = null, used = '';
+  for (let i = 0; i < order.length; i++) {
+    const gc = { response_mime_type: 'application/json', temperature: 0, maxOutputTokens: maxTok || 8192 };
+    if (modes[order[i]]) gc.thinkingConfig = modes[order[i]];
+    const body = { contents: [{ parts: [{ text: prompt }].concat(b64 ? [{ inline_data: { mime_type: mime, data: b64 } }] : []) }], generationConfig: gc };
+    r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(body), muteHttpExceptions: true });
+    used = order[i];
+    if (r.getResponseCode() === 400 && /thinking/i.test(r.getContentText()) && i < order.length - 1) continue;
+    break;
+  }
+  if (r.getResponseCode() !== 200) {
+    if (known && r.getResponseCode() === 400) P.deleteProperty('GEMINI_THINK_' + model);   // модель сменилась — в следующий раз подберём заново
+    throw new Error('gemini ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 200));
+  }
+  if (!known) P.setProperty('GEMINI_THINK_' + model, used);
+  const j = JSON.parse(r.getContentText());
+  const txt = ((((j.candidates || [])[0] || {}).content || {}).parts || []).filter(p => !p.thought).map(p => p.text || '').join('').trim();
+  const clean = txt.replace(/^```(json)?/i, '').replace(/```$/, '').trim();
+  try { return JSON.parse(clean); } catch (e) {}
+  const a = clean.indexOf('{'), b = clean.lastIndexOf('}');
+  if (a >= 0 && b > a) return JSON.parse(clean.slice(a, b + 1));
+  throw new Error('gemini_json: ' + clean.slice(0, 120));
+}
+
+function gemini_(key, b64, mime) {
+  const prompt = 'Это бланк результатов медицинских анализов (может быть несколько страниц). Извлеки ВСЕ строки с результатами со всех страниц, ' +
+    'включая текстовые результаты (например «отрицат.», «не обнаружено»), ровно как напечатано, ничего не придумывай и не пропускай. ' +
+    'Правила: date — дата взятия образца (забора); НЕ дата рождения и не дата печати; формат YYYY-MM-DD. ' +
+    'section — название раздела бланка, к которому относится строка (например «Клинический анализ крови», «Общий анализ мочи»), или пустая строка. ' +
+    'Если в названии есть «абс.» или «%», оставь это в name. Если значение «см. комм.», возьми значение из комментария. Звёздочку у значения убери. ' +
+    'Ответь только JSON вида {"date":"YYYY-MM-DD или пустая строка","lab":"название лаборатории или пустая строка",' +
+    '"items":[{"section":"раздел","name":"название показателя","value":"значение как число с точкой или текст","unit":"единицы","ref":"референсный интервал как в бланке","lo":нижняя граница числом или null,"hi":верхняя граница числом или null}]}';
+  return geminiJson_(key, prompt, mime, b64, 16384);
+}
+
+function ocr_(blob) {
+  const token = ScriptApp.getOAuthToken();
+  const boundary = 'b' + Date.now();
+  const meta = { name: 'ocr-' + Date.now(), mimeType: 'application/vnd.google-apps.document' };
+  const head = Utilities.newBlob('--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n--' + boundary + '\r\nContent-Type: ' + blob.getContentType() + '\r\n\r\n').getBytes();
+  const tail = Utilities.newBlob('\r\n--' + boundary + '--').getBytes();
+  const payload = head.concat(blob.getBytes()).concat(tail);
+  const r = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&ocrLanguage=ru&fields=id',
+    { method: 'post', contentType: 'multipart/related; boundary=' + boundary, payload: payload, headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+  if (r.getResponseCode() >= 300) throw new Error('ocr ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 200));
+  const id = JSON.parse(r.getContentText()).id;
+  const t = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id + '/export?mimeType=text/plain', { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
+  try { DriveApp.getFileById(id).setTrashed(true); } catch (e) {}
+  if (t.getResponseCode() >= 300) throw new Error('ocr export ' + t.getResponseCode());
+  return t.getContentText();
+}
+
+function filePut_(req) {
+  if (!/^[\w-]{4,40}$/.test(req.id || '')) return { ok: false, err: 'bad_id' };
+  const saved = saveBlank_(req.id, req.data, req.name);
+  return saved ? { ok: true, file: { id: saved.file.getId(), mime: saved.mime, name: saved.file.getName(), med: saved.file.getParents().next().getId() === medFolderId_() } } : { ok: false, err: 'bad_data' };
+}
+
+function cleanName_(n) { return String(n || '').replace(/[\\/:*?"<>|\n\r]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 150); }
+function medFolderId_() { return PropertiesService.getScriptProperties().getProperty('MED_FOLDER_ID') || (isClone_() ? '' : DEFAULT_MED_FOLDER_ID); }
+function ownFile_(id, allowMed) {
+  const f = DriveApp.getFileById(String(id || ''));
+  const par = f.getParents();
+  const pid = par.hasNext() ? par.next().getId() : '';
+  if (CUR && CUR.tenant) { if (CUR.folder && pid === CUR.folder) return f; throw new Error('foreign_file'); }
+  if (pid === folder_().getId()) return f;
+  if (allowMed && pid && pid === medFolderId_()) return f;
+  throw new Error('foreign_file');
+}
+/* список файлов архива «Медицина документы» — чтобы связать документы с оригиналами */
+function medList_() {
+  const id = medFolderId_(); if (!id) return { ok: true, files: [] };
+  const it = DriveApp.getFolderById(id).getFiles(); const files = [];
+  while (it.hasNext()) { const f = it.next(); if (f.isTrashed()) continue; files.push({ id: f.getId(), name: f.getName(), mime: f.getMimeType(), size: f.getSize(), created: f.getDateCreated().getTime() }); }
+  return { ok: true, files: files };
+}
+/* распознать документ (заключение врача, УЗИ, МРТ…): Gemini, если есть ключ, иначе текст OCR */
+function docRead_(req) {
+  let b64, mime, blob;
+  if (req.fid) { const f = ownFile_(req.fid, true); blob = f.getBlob(); mime = blob.getContentType(); b64 = Utilities.base64Encode(blob.getBytes()); }
+  else { const m = String(req.data || '').match(/^data:([\w\/+.-]+);base64,(.+)$/); if (!m) return { ok: false, err: 'bad_data' }; mime = m[1]; b64 = m[2]; blob = Utilities.newBlob(Utilities.base64Decode(b64), mime, 'doc'); }
+  const key = PropertiesService.getScriptProperties().getProperty('GEMINI_KEY');
+  if (key) {
+    try {
+      const prompt = 'Это медицинский документ: заключение врача, протокол УЗИ/МРТ/КТ/рентгена/ЭКГ, выписка или справка. Ничего не придумывай, бери только то, что написано. ' +
+        'Ответь только JSON: {"date":"YYYY-MM-DD дата приёма или исследования, не дата рождения","kind":"visit|us|mri|ct|xray|ecg|endo|discharge|cert|other",' +
+        '"title":"короткое название: например «УЗИ щитовидной железы» или «Приём терапевта»","spec":"специальность врача или пустая строка","doctor":"ФИО врача или пустая строка",' +
+        '"clinic":"клиника или пустая строка","conclusion":"заключение/диагноз дословно, коротко","recs":"рекомендации/назначения дословно, коротко","text":"основной текст документа"}';
+      return { ok: true, mode: 'ai', doc: geminiJson_(key, prompt, mime, b64, 8192) };
+    } catch (e) { /* ниже — OCR */ }
+  }
+  try { return { ok: true, mode: 'ocr', text: ocr_(blob) }; } catch (e) { return { ok: true, mode: 'none' }; }
+}
+
+/* ---------- питание: Open Food Facts и чтение этикеток ---------- */
+const OFF_FIELDS = 'code,product_name,product_name_ru,generic_name,brands,nutriments,serving_quantity,quantity';
+function off_(req) {
+  const opt = { headers: { 'User-Agent': 'Metrika/1.0 (personal Telegram mini app)' }, muteHttpExceptions: true };
+  if (req.code) {
+    const code = String(req.code).replace(/\D/g, '').slice(0, 20);
+    const r = UrlFetchApp.fetch('https://world.openfoodfacts.org/api/v2/product/' + code + '.json?fields=' + OFF_FIELDS, opt);
+    let j = {}; try { j = JSON.parse(r.getContentText()); } catch (e) {}
+    return { ok: true, product: j.status === 1 && j.product ? Object.assign({ code: code }, j.product) : null };
+  }
+  const q = String(req.q || '').trim().slice(0, 80);
+  if (!q) return { ok: true, products: [] };
+  // старый поиск world.openfoodfacts.org/cgi/search.pl закрыт для анонимных запросов — используем search.openfoodfacts.org
+  const r = UrlFetchApp.fetch('https://search.openfoodfacts.org/search?q=' + encodeURIComponent(q) + '&langs=ru&page_size=40&fields=' + OFF_FIELDS, opt);
+  let j = {}; try { j = JSON.parse(r.getContentText()); } catch (e) {}
+  return { ok: true, products: (j.hits || []).filter(h => h.nutriments && h.nutriments['energy-kcal_100g'] > 0) };
+}
+
+/* ---------- база продуктов: всё русскоязычное и белорусское из Open Food Facts с калорийностью ---------- */
+const FOODDB_NAME = 'metrika-fooddb.json';
+function foodDbFile_() {
+  const P = PropertiesService.getScriptProperties(); const id = P.getProperty('FOODDB_ID');
+  if (id) { try { const f = DriveApp.getFileById(id); if (!f.isTrashed()) return f; } catch (e) {} }
+  return null;
+}
+function foodDbBuild_() {
+  const opt = { headers: { 'User-Agent': 'Metrika/1.0 (personal Telegram mini app)' }, muteHttpExceptions: true };
+  const base = 'https://search.openfoodfacts.org/search?page_size=1000&fields=' + OFF_FIELDS + '&q=';
+  const rows = [], seenCode = {}, seenName = {};
+  const num = v => { const x = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(x) ? x : null; };
+  const r1 = v => Math.round(v * 10) / 10;
+  const add = h => {
+    const n = h.nutriments || {}; const k = num(n['energy-kcal_100g']); if (!(k > 0 && k < 950)) return;
+    const name = String(h.product_name_ru || h.product_name || '').replace(/\s+/g, ' ').trim(); if (!/[а-яё]/i.test(name) || name.length > 120) return;
+    const brand = String([].concat(h.brands || [])[0] || '').trim().slice(0, 40);
+    const code = String(h.code || ''); if (seenCode[code]) return;
+    const nk = (name + '|' + brand).toLowerCase(); if (seenName[nk]) return;
+    seenCode[code] = 1; seenName[nk] = 1;
+    const gen = /^(00)?9999/.test(code);
+    let s = num(h.serving_quantity); if (!(s > 0 && s < 2000)) s = 0;
+    let pk = 0; const m = String(h.quantity || '').match(/(\d+(?:[.,]\d+)?)\s*(kg|кг|g|г|гр|l|л|ml|мл)(?![a-zа-яё])/i);
+    if (m && !gen) { pk = num(m[1]) * (/^(kg|кг|l|л)$/i.test(m[2]) ? 1000 : 1); if (!(pk > 0 && pk <= 5000)) pk = 0; }
+    rows.push([code, name, brand, r1(k), r1(num(n.proteins_100g) || 0), r1(num(n.fat_100g) || 0), r1(num(n.carbohydrates_100g) || 0), s ? r1(s) : 0, pk ? r1(pk) : 0]);
+  };
+  // белорусские штрихкоды (481) — первыми, потом все русскоязычные по первой цифре кода (в одном запросе не больше 10 000)
+  const qs = ['code:481* AND nutriments.energy-kcal_100g:[1 TO *]'].concat('0123456789'.split('').map(d => 'code:' + d + '* AND nutriments.energy-kcal_100g:[1 TO *] AND (lang:ru OR lang:be)'));
+  qs.forEach(q => {
+    const first = UrlFetchApp.fetch(base + encodeURIComponent(q) + '&page=1', opt);
+    let j = {}; try { j = JSON.parse(first.getContentText()); } catch (e) { return; }
+    (j.hits || []).forEach(add);
+    const pages = Math.min(10, Math.ceil((+j.count || 0) / 1000));
+    const reqs = []; for (let p = 2; p <= pages; p++) reqs.push(Object.assign({ url: base + encodeURIComponent(q) + '&page=' + p }, opt));
+    if (reqs.length) UrlFetchApp.fetchAll(reqs).forEach(r => { try { (JSON.parse(r.getContentText()).hits || []).forEach(add); } catch (e) {} });
+  });
+  if (rows.length < 100) throw new Error('fooddb_small:' + rows.length);
+  const body = JSON.stringify({ at: Date.now(), n: rows.length, src: 'Open Food Facts (ODbL)', rows: rows });
+  let f = foodDbFile_();
+  if (f) f.setContent(body); else { f = folder_().createFile(FOODDB_NAME, body, 'application/json'); PropertiesService.getScriptProperties().setProperty('FOODDB_ID', f.getId()); }
+  return body;
+}
+function foodDb_(req) {
+  let f = foodDbFile_(); let body = f ? f.getBlob().getDataAsString() : '';
+  let at = 0; if (body) { try { at = JSON.parse(body.slice(0, 60).replace(/,"n".*$/, '}')).at || 0; } catch (e) { at = 0; } }
+  if (!body || req.force || Date.now() - at > 21 * 864e5) { try { body = foodDbBuild_(); at = JSON.parse(body.slice(0, 60).replace(/,"n".*$/, '}')).at; } catch (e) { if (!body) return { ok: false, err: 'fooddb', msg: String(e).slice(0, 200) }; } }
+  if (+req.at && +req.at === at) return { ok: true, same: true, at: at };
+  const j = JSON.parse(body); j.ok = true; return j;
+}
+function foodRead_(req) {
+  const m = String(req.data || '').match(/^data:([\w\/+.-]+);base64,(.+)$/);
+  if (!m) return { ok: false, err: 'bad_data' };
+  const key = PropertiesService.getScriptProperties().getProperty('GEMINI_KEY');
+  if (!key) return { ok: false, err: 'no_ai' };
+  const prompt = req.mode === 'barcode'
+    ? 'На фото штрихкод товара (EAN-13, EAN-8 или UPC). Прочитай цифры, напечатанные под штрихкодом, точно и полностью. Если цифр не видно или их нельзя прочитать уверенно — верни пустую строку. ' +
+      'Ответь только JSON: {"code":"цифры без пробелов","name":"название товара, если видно на фото, иначе пустая строка"}'
+    : req.mode === 'dish'
+    ? 'На фото еда. Перечисли отдельно каждое блюдо или продукт на тарелке (например: гречка, котлета, салат), оцени массу каждого в граммах по размеру тарелки и приборов и дай типичную пищевую ценность на 100 г. Отвечай быстро, без рассуждений. ' +
+      'Ответь только JSON: {"items":[{"name":"название по-русски, коротко","g":масса в граммах числом,"k":ккал на 100 г,"p":белки г на 100 г,"f":жиры г на 100 г,"c":углеводы г на 100 г}]}'
+    : 'На фото упаковка продукта или этикетка с пищевой ценностью. Найди пищевую ценность на 100 г (или 100 мл). Если указано только на порцию — пересчитай на 100 г по массе порции. Ничего не придумывай: если значения не видно, ставь null. ' +
+      'Ответь только JSON: {"name":"название продукта как на упаковке или пустая строка","brand":"марка или пустая строка","k":ккал на 100 г,"p":белки г,"f":жиры г,"c":углеводы г,"portion":масса порции в г или null,"pack":масса упаковки в г или null}';
+  const t0 = Date.now();
+  try { return { ok: true, food: geminiJson_(key, prompt, m[1], m[2], 4096), ms: Date.now() - t0 }; }
+  catch (e) { return { ok: false, err: 'ai', msg: String(e).slice(0, 200) }; }
+}
+
+function fileGet_(req) {
+  const f = ownFile_(req.fid, true);
+  const b = f.getBlob();
+  if (b.getBytes().length > 8 * 1024 * 1024) return { ok: true, url: f.getUrl(), big: true };
+  return { ok: true, data: 'data:' + b.getContentType() + ';base64,' + Utilities.base64Encode(b.getBytes()), url: f.getUrl() };
+}
+
+function fileDel_(req) {
+  try { ownFile_(req.fid).setTrashed(true); } catch (e) {}
+  return { ok: true };
+}
+
+/* ---------- проверка подписи Telegram ---------- */
+function auth_(initData) {
+  if (!initData) return null;
+  const token = PropertiesService.getScriptProperties().getProperty('BOT_TOKEN');
+  if (!token) return cloneAuth_(initData);
+  const params = {};
+  String(initData).split('&').forEach(pair => {
+    const i = pair.indexOf('=');
+    if (i > 0) params[decodeURIComponent(pair.slice(0, i))] = decodeURIComponent(pair.slice(i + 1).replace(/\+/g, '%20'));
+  });
+  const hash = params.hash;
+  if (!hash) return null;
+  const check = Object.keys(params).filter(k => k !== 'hash').sort().map(k => k + '=' + params[k]).join('\n');
+  const secret = Utilities.computeHmacSha256Signature(Utilities.newBlob(token).getBytes(), Utilities.newBlob('WebAppData').getBytes());
+  const sig = Utilities.computeHmacSha256Signature(Utilities.newBlob(check).getBytes(), secret);
+  const hex = sig.map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
+  if (hex !== hash) return null;
+  if (Date.now() / 1000 - (+params.auth_date || 0) > MAX_AGE_SEC) return null;
+  let u = {};
+  try { u = JSON.parse(params.user || '{}'); } catch (e) { return null; }
+  if (!u.id) return null;
+  return { id: +u.id, name: [u.first_name, u.last_name].filter(Boolean).join(' ') || ('id' + u.id), start_param: params.start_param || '' };
+}
+
+/* ---------- участники ---------- */
+function members_() {
+  const raw = PropertiesService.getScriptProperties().getProperty('MEMBERS');
+  return { list: raw ? JSON.parse(raw) : [] };
+}
+function saveMembers_(m) { PropertiesService.getScriptProperties().setProperty('MEMBERS', JSON.stringify(m.list)); }
+function roleOf_(x) { return x.owner ? 'owner' : (x.role === 'viewer' ? 'viewer' : 'editor'); }
+function addMember_(m, user, owner, role) {
+  const rec = { id: user.id, name: user.name, owner: !!owner, role: owner ? 'owner' : (role === 'viewer' ? 'viewer' : 'editor'), at: Date.now() };
+  m.list.push(rec); saveMembers_(m); return rec;
+}
+function requests_() {
+  const raw = PropertiesService.getScriptProperties().getProperty('REQUESTS');
+  return raw ? JSON.parse(raw) : [];
+}
+function saveRequests_(l) { PropertiesService.getScriptProperties().setProperty('REQUESTS', JSON.stringify(l)); }
+function blocked_() {
+  const raw = PropertiesService.getScriptProperties().getProperty('BLOCKED');
+  return raw ? JSON.parse(raw) : [];
+}
+function saveBlocked_(l) { PropertiesService.getScriptProperties().setProperty('BLOCKED', JSON.stringify(l)); }
+
+function pubMember_(x) { const o = Object.assign({}, x); delete o.mkey; return o; }
+function invites_() { const raw = PropertiesService.getScriptProperties().getProperty('INVITES'); return raw ? JSON.parse(raw) : []; }
+function saveInvites_(l) { PropertiesService.getScriptProperties().setProperty('INVITES', JSON.stringify(l)); }
+
+/* ---------- родные и друзья: у каждого своё пространство ---------- */
+function join_(m, me, user, req) {
+  if (isClone_()) return { ok: false, err: 'not_hub' };
+  if (me) return { ok: true, already: true, plan: me.plan || '', mkey: me.tenant ? me.mkey : '' };
+  const code = String(req.code || '').trim().toUpperCase();
+  const invs = invites_(); const inv = invs.find(x => x.code === code && !x.used);
+  if (!inv) return { ok: false, err: 'bad_invite' };
+  const rec = { id: user.id, name: user.name, owner: false, role: 'editor', tenant: true, plan: req.plan === 'own' ? 'own' : 'hub', mkey: Utilities.getUuid(), at: Date.now(), invited: inv.name };
+  m.list.push(rec); tenantFolder_(rec); saveMembers_(m);
+  inv.used = user.id; inv.usedAt = Date.now(); saveInvites_(invs);
+  const owner = m.list.find(x => x.owner);
+  if (owner) { try { tg_('sendMessage', { chat_id: owner.id, text: '«Метрика»: ' + user.name + ' (' + inv.name + ') подключился — ' + (rec.plan === 'own' ? 'личный сервер.' : 'простой вариант.') }); } catch (e) {} }
+  return { ok: true, plan: rec.plan, mkey: rec.mkey };
+}
+function familyRoot_() {
+  const P = PropertiesService.getScriptProperties(); const id = P.getProperty('FAMILY_FOLDER_ID');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
+  const par = folder_().getParents(); const f = (par.hasNext() ? par.next() : DriveApp.getRootFolder()).createFolder('Метрика — родные и друзья');
+  P.setProperty('FAMILY_FOLDER_ID', f.getId()); return f;
+}
+function tenantFolder_(rec) {
+  if (rec.folder) { try { return DriveApp.getFolderById(rec.folder); } catch (e) {} }
+  const f = familyRoot_().createFolder(cleanName_(rec.name) || ('id' + rec.id)); rec.folder = f.getId();
+  const m = members_(); const r = m.list.find(x => x.id === rec.id); if (r && r !== rec) { r.folder = rec.folder; saveMembers_(m); }
+  return f;
+}
+
+/* ---------- основной сервер: запросы от личных серверов (по ключу участника) ---------- */
+function hubApi_(req) {
+  if (isClone_()) return { ok: false, err: 'not_hub' };
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const m = members_(); const rec = m.list.find(x => x.mkey && x.mkey === String(req.mkey || ''));
+    if (!rec) return { ok: false, err: 'bad_key' };
+    if (req.op === 'verify') { const u = auth_(req.initData); if (!u || u.id !== rec.id) return { ok: false, err: 'auth' }; rec.linkedAt = rec.linkedAt || Date.now(); saveMembers_(m); return { ok: true, user: u }; }
+    CUR = rec; const ns = 't' + rec.id;
+    if (req.op === 'mirror_push') { const r = push_(req.docs || [], { id: rec.id, name: rec.name }, true, ns, false, true); rec.mirrorAt = Date.now(); saveMembers_(m); return r; }
+    if (req.op === 'mirror_pull') return pull_(+req.since || 0, ns);
+    if (req.op === 'mirror_file') {
+      const mm = String(req.data || '').match(/^data:([\w\/+.-]+);base64,(.+)$/); if (!mm) return { ok: false, err: 'bad_data' };
+      const f = tenantFolder_(rec); const name = cleanName_(req.name) || ('file ' + Date.now());
+      if (f.getFilesByName(name).hasNext()) return { ok: true, same: true };
+      f.createFile(Utilities.newBlob(Utilities.base64Decode(mm[2]), mm[1], name)); rec.mirrorAt = Date.now(); saveMembers_(m); return { ok: true };
+    }
+    if (req.op === 'hub_feed') return feed_(rec);
+    if (req.op === 'hub_react') return react_(rec, req);
+    return { ok: false, err: 'bad_op' };
+  } finally { try { lock.releaseLock(); } catch (e) {} }
+}
+function hubCall_(url, obj) {
+  if (!url) return null;
+  try { const r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'text/plain;charset=utf-8', payload: JSON.stringify(obj), muteHttpExceptions: true, followRedirects: true }); return JSON.parse(r.getContentText()); }
+  catch (e) { return null; }
+}
+
+/* ---------- личный сервер: подключение, вход, копия на основной ---------- */
+function link_(req) {
+  if (!isClone_()) return { ok: false, err: 'not_personal' };
+  const P = PropertiesService.getScriptProperties();
+  const hub = String(req.hub || ''), key = String(req.key || '');
+  if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(hub) && !/^http:\/\/127\.0\.0\.1:\d+\//.test(hub)) return { ok: false, err: 'bad_link' };
+  const v = hubCall_(hub, { op: 'verify', mkey: key, initData: req.initData });
+  if (!v || !v.ok) return { ok: false, err: 'hub_denied' };
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const m = members_(); const owner = m.list.find(x => x.owner);
+    if (owner && owner.id !== v.user.id) return { ok: false, err: 'taken' };
+    P.setProperty('HUB_URL', hub); P.setProperty('HUB_KEY', key);
+    if (!owner) addMember_(m, v.user, true);
+    let imported = 0;
+    if (!rows_().some(r => r[1])) {                     // новый сервер — забираем то, что уже сохранено на основном
+      const pr = hubCall_(hub, { op: 'mirror_pull', mkey: key, since: 0 });
+      if (pr && pr.ok) { const docs = (pr.docs || []).filter(d => d.body).map(d => ({ key: d.key, body: d.body })); if (docs.length) { push_(docs, v.user, true, '', false, true); imported = docs.length; } }
+    }
+    return { ok: true, imported: imported };
+  } finally { try { lock.releaseLock(); } catch (e) {} }
+}
+function cloneAuth_(initData) {
+  const P = PropertiesService.getScriptProperties(); const hub = P.getProperty('HUB_URL'), key = P.getProperty('HUB_KEY');
+  if (!hub || !key) return null;
+  const c = CacheService.getScriptCache();
+  const ck = 'v' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(initData))).slice(0, 40);
+  const hit = c.get(ck); if (hit) return JSON.parse(hit);
+  const r = hubCall_(hub, { op: 'verify', mkey: key, initData: initData });
+  if (!r || !r.ok || !r.user) return null;
+  c.put(ck, JSON.stringify(r.user), 21600); return r.user;
+}
+function mirrorOut_(keys) {
+  const P = PropertiesService.getScriptProperties(); const hub = P.getProperty('HUB_URL'), key = P.getProperty('HUB_KEY');
+  if (!hub || !key) return;
+  const pend = JSON.parse(P.getProperty('MIRROR_PENDING') || '[]');
+  const all = pend.concat(keys || []).filter((k, i, a) => a.indexOf(k) === i);
+  if (!all.length) return;
+  const cur = {}; rows_().forEach(r => { cur[r[0]] = r[1]; });
+  const docs = all.map(k => ({ key: k, body: cur[k] ? JSON.parse(cur[k]) : null }));
+  const r = hubCall_(hub, { op: 'mirror_push', mkey: key, docs: docs });
+  if (r && r.ok) { P.deleteProperty('MIRROR_PENDING'); P.setProperty('MIRROR_AT', String(Date.now())); }
+  else P.setProperty('MIRROR_PENDING', JSON.stringify(all.slice(-400)));
+}
+function mirrorFile_(file) {
+  const P = PropertiesService.getScriptProperties(); const hub = P.getProperty('HUB_URL'), key = P.getProperty('HUB_KEY');
+  if (!hub || !key) return;
+  const b = file.getBlob(); let ok = false;
+  if (b.getBytes().length < 20 * 1024 * 1024) { const r = hubCall_(hub, { op: 'mirror_file', mkey: key, name: file.getName(), data: 'data:' + b.getContentType() + ';base64,' + Utilities.base64Encode(b.getBytes()) }); ok = !!(r && r.ok); }
+  if (!ok) { const l = JSON.parse(P.getProperty('MIRROR_FILES') || '[]'); if (l.indexOf(file.getId()) < 0) l.push(file.getId()); P.setProperty('MIRROR_FILES', JSON.stringify(l.slice(-200))); }
+}
+function mirrorRetry_() {
+  mirrorOut_([]);
+  const P = PropertiesService.getScriptProperties(); const l = JSON.parse(P.getProperty('MIRROR_FILES') || '[]'); P.deleteProperty('MIRROR_FILES');
+  l.forEach(id => { try { mirrorFile_(DriveApp.getFileById(id)); } catch (e) {} });
+  // раз в неделю — полная сверка всех данных
+  const last = +P.getProperty('MIRROR_FULL_AT') || 0;
+  if (Date.now() - last > 7 * 864e5) { mirrorOut_(rows_().map(r => r[0])); P.setProperty('MIRROR_FULL_AT', String(Date.now())); }
+}
+/* после переименования файла на личном сервере имя в копии не меняется — это нормально */
+
+/* ---------- лента прогресса: калории, вес, реакции ---------- */
+function social_() {
+  const ss = sheet_().getParent(); let s = ss.getSheetByName('social');
+  if (!s) { s = ss.insertSheet('social'); s.getRange(1, 1, 1, 6).setValues([['at', 'from', 'fromName', 'to', 'day', 'emoji']]).setFontWeight('bold'); s.setFrozenRows(1); }
+  return s;
+}
+function feed_(me) {
+  const m = members_(); const rows = rows_(); const byKey = {}; rows.forEach(r => { byKey[r[0]] = r[1]; });
+  const people = [];
+  m.list.forEach(x => {
+    const k = x.owner ? 's_me' : 't' + x.id + '~s_me'; const raw = byKey[k]; if (!raw) return;
+    let s = null; try { s = JSON.parse(raw).s; } catch (e) {} if (!s || s.share === false) return;
+    people.push({ id: x.id, name: s.name || x.name, me: x.id === me.id, s: s });
+  });
+  const sh = social_(); const n = sh.getLastRow(); const cut = Date.now() - 21 * 864e5;
+  const reacts = n > 1 ? sh.getRange(2, 1, n - 1, 6).getValues().filter(r => +r[0] > cut).map(r => ({ at: +r[0], from: +r[1], fromName: String(r[2]), to: +r[3], day: String(r[4]), emoji: String(r[5]) })) : [];
+  return { ok: true, people: people, reacts: reacts, now: Date.now() };
+}
+function react_(me, req) {
+  const to = +req.to, day = String(req.day || '').slice(0, 10), emoji = String(req.emoji || '').slice(0, 8);
+  if (!to || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !emoji) return { ok: false, err: 'bad_react' };
+  const sh = social_(); const n = sh.getLastRow();
+  const vals = n > 1 ? sh.getRange(2, 1, n - 1, 6).getValues() : [];
+  const i = vals.findIndex(r => +r[1] === me.id && +r[3] === to && String(r[4]) === day && String(r[5]) === emoji);
+  if (i >= 0) sh.deleteRow(i + 2);
+  else {
+    sh.appendRow([Date.now(), me.id, me.name, to, day, emoji]);
+    if (to !== me.id) { try { tg_('sendMessage', { chat_id: to, text: me.name + ' ' + emoji + ' — ваш день ' + day.split('-').reverse().slice(0, 2).join('.') + ' в «Метрике»' }); } catch (e) {} }
+  }
+  return feed_(me);
+}
+
+/* ---------- служебное ---------- */
+function sheet_() {
+  const p = PropertiesService.getScriptProperties();
+  let id = p.getProperty('SHEET_ID'), ss = null;
+  if (id) { try { ss = SpreadsheetApp.openById(id); } catch (e) { ss = null; } }
+  if (!ss) {
+    ss = SpreadsheetApp.create('Метрика — данные');
+    p.setProperty('SHEET_ID', ss.getId());
+    const sh0 = ss.getSheets()[0];
+    sh0.setName('data');
+    sh0.getRange(1, 1, 1, 4).setValues([['key', 'json', 'updatedAt', 'by']]).setFontWeight('bold');
+    sh0.setFrozenRows(1);
+  }
+  return ss.getSheetByName('data') || ss.getSheets()[0];
+}
+
+function history_() {
+  const ss = sheet_().getParent();
+  let h = ss.getSheetByName('history');
+  if (!h) {
+    h = ss.insertSheet('history');
+    h.getRange(1, 1, 1, 6).setValues([['key', 'json', 'savedAt', 'savedBy', 'replacedAt', 'replacedBy']]).setFontWeight('bold');
+    h.setFrozenRows(1);
+  }
+  return h;
+}
+
+function backupFolder_() {
+  const p = PropertiesService.getScriptProperties();
+  const id = p.getProperty('BACKUP_FOLDER_ID');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
+  const parent = folder_().getParents();
+  const f = (parent.hasNext() ? parent.next() : DriveApp.getRootFolder()).createFolder('Метрика — резервные копии');
+  p.setProperty('BACKUP_FOLDER_ID', f.getId());
+  return f;
+}
+
+function folder_() {
+  const p = PropertiesService.getScriptProperties();
+  const id = p.getProperty('FOLDER_ID');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
+  const f = DriveApp.createFolder('Метрика — бланки');
+  p.setProperty('FOLDER_ID', f.getId());
+  return f;
+}
+
+function botName_() {
+  const p = PropertiesService.getScriptProperties();
+  let n = p.getProperty('BOT_NAME');
+  if (!n) {
+    try { const r = tg_('getMe', {}); n = r && r.result && r.result.username; if (n) p.setProperty('BOT_NAME', n); } catch (e) {}
+  }
+  return n || '';
+}
+
+function tg_(method, payload) {
+  const token = PropertiesService.getScriptProperties().getProperty('BOT_TOKEN');
+  if (!token) return null;
+  const r = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/' + method, {
+    method: 'post', contentType: 'application/json', payload: JSON.stringify(payload), muteHttpExceptions: true
+  });
+  return JSON.parse(r.getContentText());
+}
+
+function out_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}

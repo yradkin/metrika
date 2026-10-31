@@ -479,6 +479,16 @@ body.dragmode{-webkit-user-select:none;user-select:none}
 .stats small{display:block;font-size:11px;font-weight:600}
 .nlink{appearance:none;border:0!important;background:none!important;box-shadow:none!important;color:var(--accent);font:inherit;font-size:14px;font-weight:600;padding:8px 0 0;cursor:pointer}
 .stats span{font-size:11px;color:var(--txt-3)}
+/* ===== Близкие и приглашения ===== */
+.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:12px;font-size:14px;line-height:1.45}
+.steps li::marker{font-weight:700;color:var(--accent)}
+.invbox{margin-top:10px;padding:10px 12px;border-radius:14px;background:var(--accent-soft);display:flex;flex-direction:column;gap:8px}
+.mono-link{font-family:ui-monospace,Menlo,monospace;font-size:12px;word-break:break-all}
+.mono-i{font-family:ui-monospace,Menlo,monospace}
+.pcard .av{width:44px;height:44px}
+.rx{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
+.rxb{appearance:none;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:5px 10px;font:inherit;font-size:15px;cursor:pointer;color:var(--txt)}
+.rxb.on{background:var(--accent-soft);border-color:var(--accent);font-weight:700}
 /* ===== Питание ===== */
 .iconbtn.me{padding:0;overflow:hidden;border-radius:50%}
 .iconbtn.me .av{width:100%;height:100%;font-size:12px}
@@ -592,9 +602,10 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
+let SRV=SYNC_URL; // сервер, с которым работаем: основной или личный сервер пользователя
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='2.8';
+const APP_VER='2.9';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -803,15 +814,15 @@ function normalize(j){const o={cfg:Object.assign({},j.cfg||{}),profiles:{},tests
 function remap(t){(t.items||[]).forEach(it=>{if(!it.code&&!it.grp){const c=matchCode(it.name,it.unit);if(c){it.code=c;it.name=CAT[c].name;}}});}
 function loadLocal(){try{const j=JSON.parse(localStorage.getItem(LS)||'null');if(j)st=normalize(j);}catch(e){}}
 function docKey(kind,id){return kind==='cfg'?'cfg':kind+'_'+id;}
-function bodyOf(k){if(k==='cfg')return {cfg:st.cfg};const id=k.slice(2);if(k[0]==='f'){const d=st.days[id];return d?{f:d}:null;}if(k[0]==='m'){const f=st.foods[id];return f?{m:f}:null;}if(k[0]==='p'){const p=st.profiles[id];return p?{p}:null;}if(k[0]==='d'){const d=st.docs[id];return d?{d}:null;}const t=st.tests[id];return t?{a:t}:null;}
-function setBody(k,b){if(k==='cfg'){if(b&&b.cfg)st.cfg=Object.assign({},st.cfg,b.cfg);return;}const id=k.slice(2);
+function bodyOf(k){if(k==='cfg')return {cfg:st.cfg};if(k==='s_me'){try{return {s:buildSummary()};}catch(e){return null;}}const id=k.slice(2);if(k[0]==='f'){const d=st.days[id];return d?{f:d}:null;}if(k[0]==='m'){const f=st.foods[id];return f?{m:f}:null;}if(k[0]==='p'){const p=st.profiles[id];return p?{p}:null;}if(k[0]==='d'){const d=st.docs[id];return d?{d}:null;}const t=st.tests[id];return t?{a:t}:null;}
+function setBody(k,b){if(k==='cfg'){if(b&&b.cfg)st.cfg=Object.assign({},st.cfg,b.cfg);return;}if(k[0]==='s')return;const id=k.slice(2);
   if(k[0]==='f'){if(b&&b.f&&Array.isArray(b.f.items))st.days[id]=b.f;else delete st.days[id];return;}
   if(k[0]==='m'){if(b&&b.m&&b.m.per)st.foods[id]=b.m;else delete st.foods[id];return;}
   if(k[0]==='p'){if(b&&b.p){b.p.remind=b.p.remind||{};st.profiles[id]=b.p;}else delete st.profiles[id];}
   else if(k[0]==='d'){if(b&&b.d){b.d.files=Array.isArray(b.d.files)?b.d.files:[];st.docs[id]=b.d;}else delete st.docs[id];}
   else{if(b&&b.a){b.a.items=Array.isArray(b.a.items)?b.a.items:[];remap(b.a);st.tests[id]=b.a;}else delete st.tests[id];}}
 function applyDocs(docs,full){if(full){st.profiles={};st.tests={};st.docs={};st.foods={};st.days={};}Object.keys(docs).forEach(k=>setBody(k,docs[k]));saveLocal();}
-function persist(kind,id){const key=docKey(kind,id);saveLocal();clearTimeout(S.timers[key]);S.timers[key]=setTimeout(()=>flush(key),500);try{scheduleExport();}catch(e){}}
+function persist(kind,id){const key=docKey(kind,id);saveLocal();if(kind==='f'||kind==='p'){try{queueSummary(4000);}catch(e){}}clearTimeout(S.timers[key]);S.timers[key]=setTimeout(()=>flush(key),500);try{scheduleExport();}catch(e){}}
 async function flush(key){
   if(SY.on){if(SY.ro)return;queueKey(key);return;}
   const body=bodyOf(key);
@@ -824,7 +835,7 @@ const SY={on:false,ready:false,state:'',me:null,owner:false,role:'',ro:false,mem
 const lsGet=k=>{try{return localStorage.getItem(k);}catch(e){return null;}};
 const lsSet=(k,v)=>{try{if(v)localStorage.setItem(k,v);else localStorage.removeItem(k);}catch(e){}};
 async function api(op,data){
-  const r=await fetch(SYNC_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({op,initData:TGA?TGA.initData:''},data||{}))});
+  const r=await fetch(SRV,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({op,initData:TGA?TGA.initData:''},data||{}))});
   const j=await r.json();if(!j.ok){const e=new Error(j.err||'fail');e.code=j.err;e.msg=j.msg;throw e;}return j;}
 function savePending(){lsSet('health-pending',Object.keys(SY.pending).length?JSON.stringify(Object.keys(SY.pending)):'');}
 function queueKey(k){SY.pending[k]=++SY.seq;savePending();clearTimeout(SY.pt);SY.pt=setTimeout(syncPush,400);updSync();}
@@ -855,8 +866,11 @@ function setRole(r){SY.role=r||'';SY.ro=SY.ready&&SY.role==='viewer';document.bo
 async function syncConnect(){
   if(!TGA||!SYNC_URL||SYNC_URL.indexOf('%%')===0)return;
   try{
-    const h=await api('hello');SY.me=h.you;SY.members=h.members||[];SY.owner=!!h.owner;SY.requests=h.requests||[];SY.ai=!!h.ai;
-    if(!h.member){SY.on=false;SY.ready=false;SY.pendingAccess=!!h.pending;SY.state=(h.blocked||h.private)?'blocked':'pending';lsSet('health-shared','');updSync();render();return;}
+    const h=await api('hello',SY.inviteCode?{invite:SY.inviteCode}:{});SY.me=h.you;SY.members=h.members||[];SY.owner=!!h.owner;SY.requests=h.requests||[];SY.ai=!!h.ai;
+    SY.hub=!!h.hub;SY.personal=!!h.personal;SY.tenant=!!h.tenant;SY.plan=h.plan||'';if(h.mkey)SY.mkey=h.mkey;
+    if(!h.member){SY.on=false;SY.ready=false;SY.pendingAccess=!!h.pending;SY.invite=h.invite&&!h.invite.bad?h.invite:null;SY.inviteBad=!!(h.invite&&h.invite.bad);
+      SY.state=SY.invite?'invite':(h.blocked||h.private)?'blocked':'pending';lsSet('health-shared','');updSync();render();if(SY.inviteBad&&SY.inviteCode)toast('Код приглашения не подошёл или уже использован.');return;}
+    if(SY.tenant&&SY.plan==='own'&&SRV===SYNC_URL){SY.on=false;SY.ready=false;SY.state='ownsetup';updSync();render();return;}
     SY.pendingAccess=false;
     const pl=await api('pull',{since:0});noteMeta(pl.docs);
     const keep={};Object.keys(SY.pending).forEach(k=>keep[k]=bodyOf(k));
@@ -865,7 +879,7 @@ async function syncConnect(){
     SY.since=pl.now-1000;SY.on=true;SY.ready=true;SY.state='ok';SY.okAt=Date.now();S.tg=false;mode='shared';lsSet('health-shared','1');setRole(h.role||'editor');
     if(SY.ro){SY.pending={};savePending();}
     render();if(h.joined&&h.owner)toast(PERSONAL?'Приложение привязано к вашему Telegram. Другие его данные не увидят.':'Вы — организатор. Остальные члены семьи смогут присоединиться, а вы подтвердите их в настройках.');
-    syncPush();if(SY.owner)loadBlocked();SY.lastErr='';
+    try{queueSummary(1500);}catch(e){}syncPush();if(SY.owner)loadBlocked();SY.lastErr='';
   }catch(e){SY.state='err';SY.lastErr=(e&&(e.code||e.name||e.message))||'fail';SY.lastMsg=(e&&e.message)||'';}
   updSync();}
 function loadBlocked(){api('blocked').then(r=>{SY.blocked=r.blocked||[];SY.requests=r.requests||SY.requests;updSync();refreshShareUI();}).catch(()=>{});}
@@ -892,7 +906,7 @@ async function initStore(){
       const keys=await new Promise(res=>TGA.CloudStorage.getKeys((e,k)=>res(e?[]:k||[])));
       if(keys.length){const vals=await new Promise(res=>TGA.CloudStorage.getItems(keys,(e,v)=>res(e?{}:v||{})));const docs={};Object.keys(vals).forEach(k=>{try{docs[k]=JSON.parse(vals[k]);}catch(e){}});applyDocs(docs,true);}}
     else mode='local';
-    startSync();
+    await pickServer();startSync();
   }else if(window.claude&&window.claude.use){
     try{const db=await window.claude.use('db');if(db){S.db=db;mode='cloud';const snap=await db.collection('h').get();if(!snap.empty){const docs={};snap.docs.forEach(d=>docs[d.id]=d.data());applyDocs(docs,true);}}else mode='local';}catch(e){mode='local';}
   }else mode='local';
@@ -971,12 +985,13 @@ function render(){
   const p=curP();
   $('#brandSub').textContent=p?p.name+(ageOf(p)!=null?', '+ageOf(p)+' '+plural(ageOf(p),'год','года','лет'):''):'Анализы и динамика';
   document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===tab)));
-  if(SY.state==='pending'||SY.state==='blocked'){view.innerHTML=accessHTML();return;}
+  if(SY.state==='pending'||SY.state==='blocked'||SY.state==='invite'||SY.state==='ownsetup'){view.innerHTML=accessHTML();return;}
   if(!profList().length){view.innerHTML=welcomeHTML();return;}
   view.innerHTML=(tab==='home'?homeHTML():tab==='food'?foodHTML():tab==='tests'?testsHTML():tab==='docs'?docsHTML():tab==='ind'?indHTML():famHTML());
   const me=$('#openMe');if(me){me.innerHTML=avatar(p,30);me.setAttribute('aria-pressed',String(tab==='fam'));}
 }
-function accessHTML(){if(PERSONAL)return '<section class="hero"><div class="names">'+APP_NAME+'</div><div class="when">Это личное приложение. Доступ к нему есть только у владельца.</div></section>';
+function accessHTML(){if(SY.state==='invite')return inviteHTML();if(SY.state==='ownsetup')return ownSetupHTML();
+  if(PERSONAL)return '<section class="hero"><div class="names">'+APP_NAME+'</div><div class="when">Это личное приложение. Пользоваться им можно по приглашению.</div></section>'+codeEntryHTML();
   return '<section class="hero"><div class="names">'+APP_NAME+'</div><div class="when">'+(SY.state==='blocked'?'Доступ к этому приложению закрыт.':'Запрос на доступ отправлен. Как только его подтвердят, здесь появятся данные.')+'</div>'+(SY.state==='pending'?'<div class="spin" style="margin-top:16px"></div>':'')+'</section><p class="note">Страница обновится сама. Можно закрыть приложение и открыть позже.</p>';}
 function welcomeHTML(){return '<section class="hero"><div class="names">'+APP_NAME+'</div><div class="when">Все анализы в одном месте: загрузите фото или PDF бланка — показатели разложатся по графикам, отклонения подсветятся.</div></section>'+
   '<section class="card"><div class="h"><h2>С чего начать</h2></div><p class="small" style="margin:0 0 12px;color:var(--txt-2)">'+(PERSONAL?'Заполните профиль. Пол и год рождения нужны, чтобы подсказывать типичные нормы.':'Создайте профиль — себя или члена семьи. Пол и год рождения нужны, чтобы подсказывать типичные нормы.')+'</p><button type="button" class="btn primary block big-cta" data-act="addprof">'+(PERSONAL?'Заполнить профиль':'Создать профиль')+'</button></section>';}
@@ -1018,7 +1033,7 @@ function meHTML(){const p=curP();const n=testsOf(p.id).length;const rem=Object.v
   let h='<section class="card"><div class="h"><h2>Мой профиль</h2>'+(SY.ro?'':'<button type="button" class="link" data-editprof="'+p.id+'">Изменить</button>')+'</div><div class="list"><div class="li" style="cursor:default">'+avatar(p)+'<div><div class="t">'+esc(p.name)+'</div><div class="s">'+[p.sex==='f'?'женщина':p.sex==='m'?'мужчина':'пол не указан',ageOf(p)!=null?ageOf(p)+' '+plural(ageOf(p),'год','года','лет'):'возраст не указан'].join(' · ')+'</div></div><div class="r"></div></div></div>'+
     '<div class="stats" style="margin-top:10px"><div data-ind="V_HEIGHT"><b>'+vv('V_HEIGHT')+'</b><span>рост</span></div><div data-ind="V_WEIGHT"><b>'+vv('V_WEIGHT')+'</b><span>вес</span></div><div data-ind="V_BMI"><b>'+vv('V_BMI')+'</b><span>ИМТ</span></div></div>'+
     '<div class="row" style="margin-top:10px;gap:8px"><span class="pill p-acc">'+n+' '+plural(n,'анализ','анализа','анализов')+'</span><span class="pill p-acc">'+indicatorsOf(p.id).length+' '+plural(indicatorsOf(p.id).length,'показатель','показателя','показателей')+'</span>'+(rem?'<span class="pill p-acc">'+rem+' '+plural(rem,'напоминание','напоминания','напоминаний')+'</span>':'')+'</div></section>';
-  if((SY.ready&&SY.owner)||!TGA)h+='<button type="button" class="btn primary block big-cta" data-act="pdf">'+ICON.dl+'Отчёт для врача (PDF)</button>';
+  if(SY.ready||!TGA)h+='<button type="button" class="btn primary block big-cta" data-act="pdf">'+ICON.dl+'Отчёт для врача (PDF)</button>';
   return h;}
 
 /* ---------- Профиль ---------- */
@@ -2241,9 +2256,11 @@ function streakOf(){let n=0;let d=ymd(today());if(!dayItems(d).length)d=addDays(
 
 /* ---------- экран «Питание» ---------- */
 function foodHTML(){const p=curP();setTimeout(fdbLoad,0);
-  let h='<div class="seg" role="group">'+[['diary','Дневник'],['rep','Отчёт'],['lib','Мои продукты']].map(([k,l])=>'<button type="button" data-fseg="'+k+'" aria-pressed="'+(foodSeg===k)+'">'+l+'</button>').join('')+'</div>';
+  const segs=[['diary','Дневник'],['rep','Отчёт'],['lib','Мои продукты']];if(canFeed())segs.push(['fam','Близкие']);if(foodSeg==='fam'&&!canFeed())foodSeg='diary';
+  let h='<div class="seg" role="group">'+segs.map(([k,l])=>'<button type="button" data-fseg="'+k+'" aria-pressed="'+(foodSeg===k)+'">'+l+'</button>').join('')+'</div>';
   if(foodSeg==='rep')return h+reportHTML(p);
   if(foodSeg==='lib')return h+libHTML();
+  if(foodSeg==='fam')return h+famHTML2();
   return h+diaryHTML(p);}
 function dayLabel(d){const t=ymd(today());if(d===t)return 'Сегодня';if(d===addDays(t,-1))return 'Вчера';if(d===addDays(t,1))return 'Завтра';return parseD(d).toLocaleDateString('ru-RU',{weekday:'long'}).replace(/^./,c=>c.toUpperCase());}
 function ring(pct,col,size,inner){const a=Math.max(0,Math.min(100,pct||0));return '<span class="fring" style="width:'+size+'px;height:'+size+'px;background:conic-gradient('+col+' '+a*3.6+'deg,var(--line) 0)"><span>'+(inner||'')+'</span></span>';}
@@ -2253,6 +2270,7 @@ function diaryHTML(p){const G=foodGoal(p);const d=foodDate;const items=dayItems(
   h+='<div class="wk">'+WD.map((w,i)=>{const x=addDays(mon,i);const s=sumItems(dayItems(x));const has=dayItems(x).length>0;const pct=s.k/G.k*100;
     return '<button type="button" class="wkd'+(x===d?' on':'')+(x===t?' today':'')+'" data-fday="'+x+'"><small>'+w+'</small>'+ring(has?pct:0,pct>110?'var(--crit)':'var(--accent)',36,has?'✓':String(parseD(x).getDate()))+'</button>';}).join('')+'</div>';
   if(sk>1)h+='<div class="row" style="justify-content:center;margin-top:-4px"><span class="pill p-acc">🔥 '+sk+' '+plural(sk,'день','дня','дней')+' подряд</span></div>';
+  if(canFeed()){setTimeout(()=>loadFeed(),0);h+=myReactsLine(d);}
   const left=G.k-S.k;const pct=Math.round(S.k/G.k*100);
   h+='<section class="card ftotc"><div class="ftot"><div><b>'+fT(S.f)+'</b><span>Жиры</span></div><div><b>'+fT(S.c)+'</b><span>Углев.</span></div><div><b>'+fT(S.p)+'</b><span>Белки</span></div><div><b>'+pct+'%</b><span>от цели</span></div><div class="kc"><b>'+r0(S.k)+'</b><span>ккал</span></div></div>'+
     '<div class="fbar"><i style="width:'+Math.min(100,pct)+'%;background:'+(pct>110?'var(--crit)':'var(--accent)')+'"></i></div><div class="small muted" style="display:flex;justify-content:space-between;margin-top:6px"><span>Цель '+G.k+' ккал</span><span>'+(left>=0?'осталось <b style="color:var(--txt)">'+r0(left)+'</b>':'<b style="color:var(--crit)">+'+r0(-left)+'</b> сверх цели')+'</span></div>'+
@@ -2592,6 +2610,115 @@ document.addEventListener('change',e=>{const t=e.target;
 });
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.fq!==undefined){e.preventDefault();if(FD.q)runOffSearch();}if(e.key==='Escape')closeScan();});
 
+/* ---------- Родные и друзья: приглашение, выбор сервера, личный сервер ---------- */
+const OWN_RE=/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec\/?$|^http:\/\/127\.0\.0\.1:\d+\/$/;
+const SERVER_CODE_URL='https://yradkin.github.io/metrika/server.txt';
+function cloudGet(k){return new Promise(res=>{try{if(TGA&&TGA.CloudStorage&&TGA.isVersionAtLeast&&TGA.isVersionAtLeast('6.9'))TGA.CloudStorage.getItem(k,(e,v)=>res(e?null:v||null));else res(null);}catch(e){res(null);}});}
+function cloudSet(k,v){try{if(TGA&&TGA.CloudStorage&&TGA.isVersionAtLeast&&TGA.isVersionAtLeast('6.9')){if(v)TGA.CloudStorage.setItem(k,v,()=>{});else TGA.CloudStorage.removeItem(k,()=>{});}}catch(e){}}
+async function pickServer(){let v=lsGet('metrika-srv');const c=await cloudGet('metrika_srv');if(c!==null)v=c;if(v&&OWN_RE.test(v))SRV=v;}
+function saveServer(url){SRV=url||SYNC_URL;lsSet('metrika-srv',url||'');cloudSet('metrika_srv',url||'');}
+function ownerName(){return (SY.invite&&SY.invite.from)||lsGet('metrika-owner')||'владельца';}
+function codeEntryHTML(){return '<section class="card"><div class="h"><h2>Есть приглашение?</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Если вам прислали код, введите его здесь. По ссылке-приглашению код подставится сам.</p><div class="row" style="flex-wrap:nowrap;gap:8px"><input class="inp" id="invcode" placeholder="Например, K7M2QX" autocomplete="off" style="text-transform:uppercase"><button type="button" class="btn primary" data-act="invgo">Войти</button></div></section>';}
+function inviteHTML(){const I=SY.invite||{};const share=lsGet('metrika-share')!=='0';
+  return '<section class="hero"><div class="names">'+APP_NAME+'</div><div class="when">'+esc(I.from||'Вас')+' '+(I.from?'приглашает вас':'приглашены')+'. Анализы, документы, вес и питание — в одном месте. Как будем хранить ваши данные?</div></section>'+
+   '<section class="card"><div class="h"><h2>Простой вариант</h2><span class="pill p-good">1 минута</span></div><p class="small" style="margin:0 0 12px;color:var(--txt-2)">Всё готово сразу — откройте и пользуйтесь. Данные хранятся на основном сервере'+(I.from?' — его ведёт '+esc(I.from):'')+'.</p><button type="button" class="btn primary block big-cta" data-join="hub">Начать</button></section>'+
+   '<section class="card"><div class="h"><h2>Личный сервер</h2><span class="pill p-acc">≈15 минут</span></div><p class="small" style="margin:0 0 12px;color:var(--txt-2)">Больше шагов, нужен компьютер. Зато у вас будет личный сервер в вашем Google-аккаунте, и все ваши файлы и данные будут у вас.</p><button type="button" class="btn block" data-join="own">Настроить личный сервер</button></section>'+
+   '<label class="card row" style="flex-wrap:nowrap;gap:12px;cursor:pointer"><input type="checkbox" data-share-def '+(share?'checked':'')+' style="width:22px;height:22px;flex:none"><span><b>Показывать близким мой прогресс</b><br><span class="small muted">Калории за день и вес — во вкладке «Близкие», можно ставить реакции. Анализы и документы не видит никто. Можно выключить в любой момент.</span></span></label>';}
+function ownSetupHTML(){const from=ownerName();
+  return '<section class="hero"><div class="names">Личный сервер</div><div class="when">Один раз на компьютере, около 15 минут. Сервер будет в вашем Google-аккаунте, бесплатно.</div></section>'+
+   '<section class="card"><ol class="steps">'+
+   '<li>На компьютере войдите в свой Google и откройте <b>script.google.com</b> → «Новый проект».<div class="row" style="gap:6px;margin-top:6px"><button type="button" class="btn sm" data-copy="https://script.google.com/home/projects/create">Скопировать ссылку</button></div></li>'+
+   '<li>Откройте код сервера, выделите всё (Ctrl/⌘+A), скопируйте и вставьте в проект вместо всего текста. Нажмите 💾 «Сохранить».<div class="row" style="gap:6px;margin-top:6px"><button type="button" class="btn sm" data-copy="'+SERVER_CODE_URL+'">Скопировать ссылку на код</button><button type="button" class="btn sm ghost" data-openurl="'+SERVER_CODE_URL+'">Открыть</button></div></li>'+
+   '<li>Вверху выберите функцию <b>setup</b> → «Выполнить» → «Предоставить доступ» → ваш аккаунт → «Дополнительные настройки» → «Перейти к проекту» → «Разрешить». Google предупреждает так про любой личный скрипт.</li>'+
+   '<li>«Развертывание» → «Новое развертывание» → ⚙️ «Веб-приложение». «Выполнять как» — <b>Я</b>, «У кого есть доступ» — <b>Все</b> → «Развернуть». Скопируйте адрес веб-приложения (заканчивается на /exec).</li>'+
+   '<li>Вставьте адрес сюда и нажмите «Подключить».</li></ol>'+
+   '<div class="row" style="flex-wrap:nowrap;gap:8px;margin-top:10px"><input class="inp" id="ownurl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"><button type="button" class="btn primary" data-act="ownlink">Подключить</button></div>'+
+   '<p class="note" style="margin:10px 0 0">По желанию: чтобы бланки распознавала нейросеть, получите бесплатный ключ на aistudio.google.com и добавьте его в «Настройки проекта» → «Свойства скрипта» под именем GEMINI_KEY. Резервная копия данных сохраняется на основном сервере'+(from!=='владельца'?' (его ведёт '+esc(from)+')':'')+', чтобы ничего не потерялось.</p></section>'+
+   '<button type="button" class="btn block ghost" data-act="ownskip">Пока выбрать простой вариант</button>';}
+async function ownLink(){const i=$('#ownurl');const url=(i&&i.value||'').trim();if(!OWN_RE.test(url)){toast('Нужен адрес вида https://script.google.com/macros/s/…/exec');return;}
+  if(!SY.mkey){toast('Сначала откройте приглашение заново.');return;}toast('Подключаю личный сервер…');
+  try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({op:'link',hub:SYNC_URL,key:SY.mkey,initData:TGA?TGA.initData:''})});const j=await r.json();
+    if(!j.ok){toast(j.err==='hub_denied'?'Основной сервер не подтвердил вход — попробуйте ещё раз.':j.err==='taken'?'Этот сервер уже подключён к другому человеку.':j.err==='not_personal'?'Это не личный сервер: в нём не должно быть свойства BOT_TOKEN.':'Не получилось: '+(j.msg||j.err||'ошибка'));return;}
+    saveServer(url);SY.state='';toast(j.imported?'Личный сервер подключён. Перенесено записей: '+j.imported+'.':'Личный сервер подключён.');haptic('ok');await syncConnect();render();}
+  catch(e){toast('Сервер не отвечает. Проверьте: развёртывание — «Веб-приложение», доступ «Все», адрес заканчивается на /exec.');}}
+async function toHub(){try{saveServer('');await api('plan',{plan:'hub'});toast('Теперь данные хранятся на основном сервере.');SY.state='';await syncConnect();render();}catch(e){toast('Не получилось: '+(e.msg||e.code||'нет связи'));}}
+function planCard(){if(!SY.ready||!(SY.tenant||SY.personal))return '';
+  if(SY.personal)return '<section class="card"><div class="h"><h2>Личный сервер</h2><span class="pill p-good">подключён</span></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Ваши данные и файлы хранятся в вашем Google-аккаунте, в папке «Метрика». Резервная копия обновляется автоматически.</p><button type="button" class="btn sm ghost" data-act="tohub">Перейти на простой вариант</button></section>';
+  return '<section class="card"><div class="h"><h2>Где хранятся данные</h2><span class="pill p-acc">простой вариант</span></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Данные хранятся на основном сервере. Можно в любой момент перейти на личный сервер — всё уже внесённое перенесётся.</p><button type="button" class="btn sm" data-act="toown">Перейти на личный сервер</button></section>';}
+/* у владельца: приглашения и список близких */
+function familyCard(){if(!(SY.ready&&SY.owner&&SY.hub))return '';const ts=SY.members.filter(m=>m.tenant);const inv=(SY.invites||[]).filter(x=>!x.used);
+  return '<section class="card" id="famCard"><div class="h"><h2>Родные и друзья</h2>'+(ts.length?'<span class="pill p-acc">'+ts.length+'</span>':'')+'</div>'+
+   '<p class="small" style="margin:0 0 10px;color:var(--txt-2)">У каждого своё отдельное пространство: свои анализы, документы и питание. Друг друга и ваши данные они не видят — кроме общего прогресса во вкладке «Близкие», если человек его включил.</p>'+
+   (ts.length?'<div class="list">'+ts.map(m=>'<div class="li" style="cursor:default"><span class="mono" style="width:34px;height:34px;font-size:12px">'+esc(initials(m.name))+'</span><div><div class="t">'+esc(m.name)+(m.invited&&m.invited!==m.name?' <span class="muted">· '+esc(m.invited)+'</span>':'')+'</div><div class="s">'+(m.plan==='own'?(m.linkedAt?'личный сервер · копия '+(m.mirrorAt?fmtAgo(m.mirrorAt):'ещё не приходила'):'личный сервер · ещё не подключён'):'простой вариант')+'</div></div><div class="r"><button type="button" class="btn sm ghost" data-kick="'+m.id+'">Закрыть доступ</button></div></div>').join('')+'</div>':'')+
+   '<div class="row" style="flex-wrap:nowrap;gap:8px;margin-top:10px"><input class="inp" id="invname" placeholder="Кого пригласить: например, Мама" autocomplete="off"><button type="button" class="btn primary" data-act="invnew">Пригласить</button></div>'+
+   (SY.lastInvite?'<div class="invbox"><div class="small muted">Отправьте эту ссылку — по ней откроется «Метрика» с приглашением. Код: <b>'+esc(SY.lastInvite.code)+'</b></div><div class="mono-link">'+esc(SY.lastInvite.link)+'</div><div class="row" style="gap:6px"><button type="button" class="btn sm primary" data-act="invshare">Отправить в Telegram</button><button type="button" class="btn sm" data-copy="'+esc(SY.lastInvite.link)+'">Скопировать</button></div></div>':'')+
+   (inv.length?'<div class="small muted" style="margin-top:10px">Ждут ответа: '+inv.map(x=>esc(x.name)+' (<span class="mono-i">'+esc(x.code)+'</span>) <button type="button" class="nlink" data-invdel="'+esc(x.code)+'" style="padding:0">отменить</button>').join(', ')+'</div>':'')+'</section>';}
+function refreshFamilyUI(){const el=$('#famCard');if(el)el.outerHTML=familyCard();}
+function loadInvites(){if(!(SY.ready&&SY.owner&&SY.hub))return;api('invites').then(r=>{SY.invites=r.invites||[];SY.bot=r.bot||SY.bot;if(r.members)SY.members=r.members;refreshFamilyUI();}).catch(()=>{});}
+function copyText(t){const done=()=>toast('Скопировано.');try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done).catch(()=>fallback());return;}}catch(e){}fallback();
+  function fallback(){const a=document.createElement('textarea');a.value=t;a.style.cssText='position:fixed;opacity:0';document.body.appendChild(a);a.select();try{document.execCommand('copy');done();}catch(e){toast(t);}a.remove();}}
+
+/* ---------- прогресс для близких: короткая сводка (калории по дням, вес) ---------- */
+let sumT=0;function queueSummary(ms){if(!(SY.ready&&!SY.ro&&(SY.tenant||SY.personal||SY.hub)))return;clearTimeout(sumT);sumT=setTimeout(()=>{if(!curP())return;queueKey('s_me');},ms||3000);}
+function shareOn(p){return p&&p.share!=null?p.share!==false:lsGet('metrika-share')!=='0';}
+function buildSummary(){const p=curP();if(!p)return null;const G=foodGoal(p);const t=ymd(today());const days=[];
+  for(let i=13;i>=0;i--){const d=addDays(t,-i);const its=dayItems(d);if(!its.length)continue;const s=sumItems(its);days.push({d,k:Math.round(s.k),p:Math.round(s.p),f:Math.round(s.f),c:Math.round(s.c)});}
+  const cut=addDays(t,-120);let ws=wlogGet(p).filter(w=>w.date>=cut).map(w=>({d:w.date,kg:w.kg}));if(ws.length>40){const step=ws.length/40;ws=ws.filter((w,i)=>i===ws.length-1||Math.floor(i/step)!==Math.floor((i+1)/step));}
+  return {name:p.name,photo:p.photo&&p.photo.length<30000?p.photo:'',share:shareOn(p),goal:G.k,streak:streakOf(),days,w:ws,at:Date.now()};}
+function canFeed(){return SY.ready&&(SY.tenant||SY.personal||(SY.owner&&SY.hub&&SY.members.some(m=>m.tenant)));}
+async function loadFeed(force){if(!canFeed()||SY.feedBusy)return;if(!force&&Date.now()-(SY.feedTry||0)<(SY.feed?60000:15000))return;SY.feedTry=Date.now();SY.feedBusy=true;
+  try{const r=await api('feed');SY.feed=r;SY.feedAt=Date.now();}catch(e){SY.feedErr=e.code==='bad_op'||e.code==='hub_down'?e.code:'fail';}finally{SY.feedBusy=false;}if(tab==='food'&&!(document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)&&view.contains(document.activeElement)))render();}
+const REACTS=['👍','🔥','💪','❤️','👏','🥗'];
+function famHTML2(){if(!SY.feed){loadFeed();return '<section class="card" style="text-align:center"><div class="spin"></div><p class="small muted" style="margin:8px 0 0">'+(SY.feedErr==='bad_op'?'Обновите сервер до v10.':SY.feedErr?'Не получилось загрузить. Проверьте связь.':'Загружаю прогресс близких…')+'</p></section>';}
+  setTimeout(()=>loadFeed(),0);const F=SY.feed;const myId=SY.me&&SY.me.id;const p=curP();
+  let h='';if(!shareOn(p))h+='<section class="card"><p class="small" style="margin:0 0 10px">Ваш прогресс близким сейчас не виден.</p><button type="button" class="btn sm primary" data-act="shareon">Показывать мой прогресс</button></section>';
+  const ppl=(F.people||[]).slice().sort((a,b)=>(b.me-a.me));
+  if(!ppl.length)return h+'<section class="card"><div class="empty">Пока никто не поделился прогрессом. Как только близкие начнут вести дневник, их калории и вес появятся здесь.</div></section>';
+  ppl.forEach(x=>{h+=personCard(x,F.reacts||[],myId);});
+  if(shareOn(p))h+='<button type="button" class="btn block ghost" data-act="shareoff">Скрыть мой прогресс от близких</button>';
+  return h;}
+function personCard(x,reacts,myId){const s=x.s||{};const t=ymd(today());const last=(s.days||[]).slice(-1)[0];const day=last?last.d:t;const goal=s.goal||2000;
+  const todayK=last&&last.d===t?last.k:0;const pct=Math.round(todayK/goal*100);
+  // 7 дней
+  const W=300,H=70,bw=26;const d7=[];for(let i=6;i>=0;i--){const d=addDays(t,-i);const v=(s.days||[]).find(z=>z.d===d);d7.push({d,k:v?v.k:0});}
+  const mx=Math.max(goal*1.2,...d7.map(z=>z.k))||1;let svg='<svg class="chart" viewBox="0 0 '+W+' '+(H+14)+'" aria-hidden="true">';
+  d7.forEach((z,i)=>{const cx=W/7*(i+.5);const hh=z.k/mx*H;svg+='<rect x="'+(cx-bw/2)+'" y="'+(H-hh)+'" width="'+bw+'" height="'+Math.max(z.k?2:0,hh)+'" rx="4" fill="'+(z.k>goal*1.1?'var(--crit)':'var(--accent)')+'" opacity="'+(z.d===t?1:.7)+'"/><text x="'+cx+'" y="'+(H+12)+'" text-anchor="middle">'+WD[(parseD(z.d).getDay()+6)%7]+'</text>';});
+  svg+='<line x1="0" x2="'+W+'" y1="'+(H-goal/mx*H)+'" y2="'+(H-goal/mx*H)+'" stroke="var(--crit)" stroke-dasharray="4 4" opacity=".6"/></svg>';
+  const ws=s.w||[];const wl=ws[ws.length-1];const wAgo=n=>{const c=addDays(t,-n);const a=ws.filter(w=>w.d<=c).slice(-1)[0];return a&&wl?Math.round((wl.kg-a.kg)*10)/10:null;};const w7=wAgo(7),w30=wAgo(30);
+  const chg=v=>v==null?'':'<span class="'+(v>0?'st-high':v<0?'st-ok':'')+'">'+(v>0?'+':'')+fN(v)+'</span>';
+  const rs=reacts.filter(r=>r.to===x.id&&r.day===day);const cnt={};rs.forEach(r=>{(cnt[r.emoji]=cnt[r.emoji]||[]).push(r);});
+  const av=s.photo?'<span class="av" style="padding:0;overflow:hidden"><img src="'+s.photo+'" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></span>':'<span class="av" style="background:var(--accent)">'+esc(initials(x.name))+'</span>';
+  return '<section class="card pcard"><div class="row" style="flex-wrap:nowrap;gap:10px">'+av+'<div style="min-width:0;flex:1"><div style="font-weight:700">'+esc(x.name)+(x.me?' <span class="muted" style="font-weight:600">· вы</span>':'')+'</div><div class="small muted">'+(s.streak>1?'🔥 '+s.streak+' '+plural(s.streak,'день','дня','дней')+' подряд':last?'последняя запись '+fmtDs(last.d):'пока без записей')+'</div></div>'+ring(todayK?pct:0,pct>110?'var(--crit)':'var(--accent)',48,'<b style="font-size:11px">'+(todayK?pct+'%':'—')+'</b>')+'</div>'+
+   '<div class="small" style="margin-top:8px">Сегодня: <b>'+(todayK?todayK+' из '+goal+' ккал':'записей нет')+'</b></div>'+svg+
+   (wl?'<div class="small" style="margin-top:2px">Вес: <b>'+fN(wl.kg)+' кг</b>'+(w7!=null?' · за неделю '+chg(w7):'')+(w30!=null?' · за месяц '+chg(w30):'')+'</div>':'')+
+   '<div class="rx"><span class="small muted">'+(day===t?'Сегодня':fmtDs(day))+':</span>'+REACTS.map(e=>{const l=cnt[e]||[];const mine=l.some(r=>r.from===myId);return x.me?(l.length?'<span class="rxb on" title="'+esc(l.map(r=>r.fromName).join(', '))+'">'+e+' '+l.length+'</span>':''):'<button type="button" class="rxb'+(mine?' on':'')+'" data-react="'+x.id+'|'+day+'|'+e+'">'+e+(l.length?' '+l.length:'')+'</button>';}).join('')+'</div>'+
+   (rs.length?'<div class="small muted" style="margin-top:4px">'+Object.keys(cnt).map(e=>e+' '+cnt[e].map(r=>esc(r.fromName.split(' ')[0])).join(', ')).join(' · ')+'</div>':'')+'</section>';}
+/* реакции, которые получили вы за выбранный день — строкой в дневнике */
+function myReactsLine(d){if(!SY.feed||!SY.me)return '';const rs=(SY.feed.reacts||[]).filter(r=>r.to===SY.me.id&&r.day===d&&r.from!==SY.me.id);if(!rs.length)return '';
+  return '<div class="fsum" style="background:var(--good-soft)"><span>'+rs.map(r=>r.emoji+' '+esc(r.fromName.split(' ')[0])).join(' · ')+'</span></div>';}
+
+document.addEventListener('click',e=>{const t=e.target;let el;
+  if((el=t.closest('[data-join]'))){const plan=el.dataset.join;const code=SY.invite&&SY.invite.code;if(!code)return;el.disabled=true;
+    api('join',{code,plan}).then(r=>{if(SY.invite&&SY.invite.from)lsSet('metrika-owner',SY.invite.from);SY.mkey=r.mkey||SY.mkey;SY.inviteCode='';
+      if(plan==='own'){SY.state='ownsetup';render();window.scrollTo(0,0);}else{SY.state='';toast('Готово! Заполните профиль — и можно пользоваться.');syncConnect();}})
+    .catch(er=>{el.disabled=false;toast(er.code==='bad_invite'?'Приглашение уже использовано или отменено.':'Не получилось — проверьте связь.');});return;}
+  if((el=t.closest('[data-react]'))){const [to,day,emoji]=el.dataset.react.split('|');el.disabled=true;haptic();
+    api('react',{to:+to,day,emoji}).then(r=>{SY.feed=r;SY.feedAt=Date.now();render();}).catch(()=>{el.disabled=false;toast('Не получилось — проверьте связь.');});return;}
+  if((el=t.closest('[data-copy]'))){copyText(el.dataset.copy);return;}
+  if((el=t.closest('[data-invdel]'))){api('invite_del',{code:el.dataset.invdel}).then(r=>{SY.invites=r.invites||[];refreshFamilyUI();}).catch(()=>{});return;}
+  if((el=t.closest('[data-act]'))){const a=el.dataset.act;
+    if(a==='invgo'){const v=($('#invcode')||{}).value||'';if(!v.trim()){toast('Введите код.');return;}SY.inviteCode=v.trim().toUpperCase();syncConnect();return;}
+    if(a==='ownlink'){ownLink();return;}
+    if(a==='ownskip'){api('plan',{plan:'hub'}).then(()=>{SY.state='';syncConnect();}).catch(()=>toast('Не получилось — проверьте связь.'));return;}
+    if(a==='tohub'){confirmBox({title:'Перейти на простой вариант?',text:'Данные будут храниться на основном сервере — там уже есть их копия. Личный сервер останется в вашем Google-аккаунте, но приложение перестанет с ним работать.',ok:'Перейти',onOk:()=>{closeSheet();toHub();}});return;}
+    if(a==='toown'){api('plan',{plan:'own'}).then(r=>{SY.mkey=r.mkey;closeSheet();SY.ready=false;SY.on=false;SY.state='ownsetup';render();window.scrollTo(0,0);}).catch(()=>toast('Не получилось — обновите сервер.'));return;}
+    if(a==='invnew'){const n=($('#invname')||{}).value||'';api('invite_new',{name:n.trim()}).then(r=>{SY.invites=r.invites||[];SY.bot=r.bot||SY.bot;SY.lastInvite={code:r.code,link:'https://t.me/'+(r.bot||'mymetricabot')+'?startapp=inv_'+r.code};refreshFamilyUI();haptic('ok');}).catch(er=>toast(er.code==='bad_op'?'Обновите сервер до v10.':'Не получилось.'));return;}
+    if(a==='invshare'&&SY.lastInvite){openUrl('https://t.me/share/url?url='+encodeURIComponent(SY.lastInvite.link)+'&text='+encodeURIComponent('Приглашаю в «Метрику» — анализы, вес и питание в одном месте. Код: '+SY.lastInvite.code));return;}
+    if(a==='shareon'||a==='shareoff'){const p=curP();p.share=a==='shareon';persist('p',p.id);lsSet('metrika-share',p.share?'1':'0');queueSummary(300);toast(p.share?'Близкие видят ваш прогресс.':'Прогресс скрыт.');setTimeout(()=>loadFeed(true),3000);render();return;}
+  }
+});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.shareDef!==undefined){lsSet('metrika-share',t.checked?'1':'0');}});
+
 /* ---------- Настройки, доступ, защита ---------- */
 function diagCard(){if(!(TGA&&SYNC_URL)||SYNC_URL.indexOf('%%')===0)return '';
   if(SY.ready&&!SY.owner)return '<section class="card"><div class="h"><h2>Подключение</h2><span class="pill p-warn">не владелец</span></div><p class="small" style="margin:0;color:var(--txt-2)">Сервер подключён, но владельцем записан другой аккаунт Telegram. Чтобы стать владельцем: в Apps Script выберите функцию resetAccess → «Выполнить», затем закройте и снова откройте приложение.</p></section>';
@@ -2599,20 +2726,20 @@ function diagCard(){if(!(TGA&&SYNC_URL)||SYNC_URL.indexOf('%%')===0)return '';
   const e=SY.lastErr||'';const why=e==='auth'?'Сервер не узнал подпись Telegram. Проверьте свойство BOT_TOKEN в Apps Script: это должен быть токен именно этого бота, без пробелов. После исправления развёртывание менять не нужно.':
     (e==='TypeError'||e==='SyntaxError')?'Сервер не отвечает как надо. Проверьте развёртывание: «Веб-приложение», выполнять от имени «Я», доступ «Все». Если меняли код — нужна новая версия развёртывания.':
     e?'Ошибка сервера: '+e+(SY.lastMsg&&SY.lastMsg!==e?' ('+SY.lastMsg+')':''):'Подключаюсь к серверу…';
-  return '<section class="card"><div class="h"><h2>Подключение</h2><span class="pill '+(e?'p-crit':'p-warn')+'">'+(e?'нет связи':'ждём')+'</span></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">'+esc(why)+'</p><button type="button" class="btn sm" data-act="reconnect">Повторить</button></section>';}
+  return '<section class="card"><div class="h"><h2>Подключение</h2><span class="pill '+(e?'p-crit':'p-warn')+'">'+(e?'нет связи':'ждём')+'</span></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">'+esc(SRV!==SYNC_URL?'Ваш личный сервер не отвечает. '+why:why)+'</p><div class="row" style="gap:8px"><button type="button" class="btn sm" data-act="reconnect">Повторить</button>'+(SRV!==SYNC_URL?'<button type="button" class="btn sm" data-act="tohub">Перейти на простой вариант</button>':'')+'</div></section>';}
 function shareCard(){if(!(TGA&&SYNC_URL)||!SY.ready||!SY.owner)return '';
-  if(PERSONAL&&!SY.requests.length&&!SY.members.some(m=>!m.owner))return '<section class="card" id="shareCard"><div class="h"><h2>Синхронизация</h2><span class="pill p-good">личное</span></div><p class="small" id="syncStatus" style="margin:0 0 8px;color:var(--txt-2)">'+esc(syncText())+'</p><p class="small" style="margin:0;color:var(--txt-3)">Данные привязаны к вашему Telegram и видны на всех ваших устройствах. Другим людям приложение закрыто.</p></section>';
+  if(PERSONAL&&!SY.requests.length&&!SY.members.some(m=>!m.owner&&!m.tenant))return '<section class="card" id="shareCard"><div class="h"><h2>Синхронизация</h2><span class="pill p-good">личное</span></div><p class="small" id="syncStatus" style="margin:0 0 8px;color:var(--txt-2)">'+esc(syncText())+'</p><p class="small" style="margin:0;color:var(--txt-3)">Данные привязаны к вашему Telegram и видны на всех ваших устройствах. Другим людям приложение закрыто.</p></section>';
   let h='<section class="card" id="shareCard"><div class="h"><h2>Доступ</h2><span class="pill p-good">синхронизация</span></div><p class="small" id="syncStatus" style="margin:0 0 10px;color:var(--txt-2)">'+esc(syncText())+'</p>';
   if(SY.requests.length)h+='<div class="h" style="margin-top:6px"><h2>Запросы на доступ</h2><span class="pill p-warn">'+SY.requests.length+'</span></div><div class="list">'+SY.requests.map(r=>'<div class="li" style="cursor:default"><span class="mono" style="width:34px;height:34px;font-size:12px">'+esc(initials(r.name))+'</span><div><div class="t">'+esc(r.name)+'</div><div class="s">хочет присоединиться</div><div class="row" style="margin-top:6px;gap:6px"><button type="button" class="btn sm primary" data-approve="'+r.id+'|editor">Принять</button><button type="button" class="btn sm" data-approve="'+r.id+'|viewer">Только просмотр</button><button type="button" class="btn sm ghost" data-deny="'+r.id+'">Отклонить</button></div></div><div class="r"></div></div>').join('')+'</div>';
-  const others=SY.members.filter(m=>!m.owner);
+  const others=SY.members.filter(m=>!m.owner&&!m.tenant);
   h+='<div class="h" style="margin-top:12px"><h2>Участники</h2></div>'+(others.length?'<div class="list">'+others.map(m=>'<div class="li" style="cursor:default"><span class="mono" style="width:34px;height:34px;font-size:12px">'+esc(initials(m.name))+'</span><div><div class="t">'+esc(m.name)+'</div><div class="row" style="margin-top:6px;gap:6px"><div class="seg" role="group">'+[['editor','Редактор'],['viewer','Просмотр']].map(([r,l])=>'<button type="button" data-role="'+m.id+'|'+r+'" aria-pressed="'+((m.role||'editor')===r)+'">'+l+'</button>').join('')+'</div><button type="button" class="btn sm ghost" data-kick="'+m.id+'">Закрыть доступ</button></div></div><div class="r"></div></div>').join('')+'</div>':'<div class="empty">Пока никого. Перешлите бота родным: при первом открытии они пришлют запрос, а вы подтвердите его здесь.</div>');
   if(SY.blocked.length)h+='<div class="h" style="margin-top:12px"><h2>Доступ закрыт</h2></div><div class="list">'+SY.blocked.map(b=>'<div class="li" style="cursor:default"><span class="mono" style="width:34px;height:34px;font-size:12px;opacity:.6">'+esc(initials(b.name))+'</span><div><div class="t" style="color:var(--txt-3)">'+esc(b.name)+'</div></div><div class="r"><button type="button" class="btn sm" data-unblock="'+b.id+'">Вернуть доступ</button></div></div>').join('')+'</div>';
   return h+'</section>';}
 function refreshShareUI(){const el=$('#shareCard');if(el)el.outerHTML=shareCard();}
 function protectCard(){if(!(SY.ready&&SY.owner))return '';return '<section class="card"><div class="h"><h2>Защита данных</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Все прошлые версии и удалённое хранятся. Каждую ночь делается резервная копия.</p><div class="row"><button type="button" class="btn sm" data-act="changelog">Журнал изменений</button><button type="button" class="btn sm" data-act="trash">Корзина</button><button type="button" class="btn sm" data-act="backups">Резервные копии</button></div></section>';}
-function openSettings(){refreshHello();
-  openSheet(top('Настройки')+'<div class="stack">'+(profList().length&&((SY.ready&&SY.owner)||!TGA)?'<button type="button" class="btn primary block big-cta" data-act="pdf">'+ICON.dl+'Отчёт для врача (PDF) — '+esc(curP().name)+'</button>':'')+
-   diagCard()+shareCard()+readableCard()+protectCard()+medCard()+
+function openSettings(){refreshHello();try{loadInvites();}catch(e){}
+  openSheet(top('Настройки')+'<div class="stack">'+(profList().length&&(SY.ready||!TGA)?'<button type="button" class="btn primary block big-cta" data-act="pdf">'+ICON.dl+'Отчёт для врача (PDF) — '+esc(curP().name)+'</button>':'')+
+   diagCard()+planCard()+familyCard()+shareCard()+readableCard()+protectCard()+medCard()+
    '<section class="card"><div class="h"><h2>Распознавание бланков</h2></div><p class="small" style="margin:0;color:var(--txt-2)">'+(SY.ai?'Подключена нейросеть Gemini — распознаёт точнее.':'Работает встроенное распознавание текста Google Диска. Для большей точности можно подключить ключ Gemini в настройках скрипта (GEMINI_KEY).')+'</p></section>'+
    (SY.ro?'':'<section class="card"><div class="h"><h2>Импорт истории</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Файл импорта (.json) с анализами за прошлые годы. Повторы пропускаются автоматически.</p><label class="btn block" style="position:relative">'+ICON.up.replace('<svg','<svg width="18" height="18" style="stroke:currentColor;fill:none;stroke-width:2"')+'Выбрать файл импорта<input type="file" accept=".json,application/json" data-import style="position:absolute;inset:0;opacity:0"></label><div style="margin-top:12px">'+healthImportBlock()+'</div></section>')+
    '<section class="card"><div class="h"><h2>Оформление</h2></div><div class="seg" role="group">'+[['auto','Как в системе'],['light','Светлая'],['dark','Тёмная']].map(([k,l])=>'<button type="button" data-theme-set="'+k+'" aria-pressed="'+((localTheme()||'auto')===k)+'">'+l+'</button>').join('')+'</div></section>'+'<p class="note" style="margin:0">Версия '+APP_VER+(TGA?(TGA.initData?' · Telegram ✓':' · Telegram без подписи'):'')+'</p></div>','settings');}
@@ -2646,7 +2773,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
   if((el=t.closest('[data-approve]'))){const [id,role]=el.dataset.approve.split('|');api('approve',{id:+id,role}).then(r=>{SY.members=r.members||SY.members;SY.requests=r.requests||[];updSync();refreshShareUI();toast('Доступ открыт.');}).catch(()=>toast('Не получилось, проверьте интернет.'));return;}
   if((el=t.closest('[data-deny]'))){api('deny',{id:+el.dataset.deny}).then(r=>{SY.requests=r.requests||[];SY.blocked=r.blocked||SY.blocked;updSync();refreshShareUI();toast('Запрос отклонён. Вернуть можно в «Доступ закрыт».');}).catch(()=>toast('Не получилось, проверьте интернет.'));return;}
   if((el=t.closest('[data-role]'))){const [id,r]=el.dataset.role.split('|');api('role',{id:+id,role:r}).then(x=>{SY.members=x.members||SY.members;refreshShareUI();}).catch(()=>toast('Не получилось.'));return;}
-  if((el=t.closest('[data-kick]'))){if(el.dataset.armed!=='1'){el.dataset.armed='1';el.textContent='Точно закрыть?';return;}api('kick',{id:+el.dataset.kick}).then(r=>{SY.members=r.members||SY.members;SY.blocked=r.blocked||SY.blocked;refreshShareUI();toast('Доступ закрыт.');}).catch(()=>toast('Не получилось.'));return;}
+  if((el=t.closest('[data-kick]'))){if(el.dataset.armed!=='1'){el.dataset.armed='1';el.textContent='Точно закрыть?';return;}api('kick',{id:+el.dataset.kick}).then(r=>{SY.members=r.members||SY.members;SY.blocked=r.blocked||SY.blocked;refreshShareUI();refreshFamilyUI();toast('Доступ закрыт.');}).catch(()=>toast('Не получилось.'));return;}
   if((el=t.closest('[data-unblock]'))){api('unblock',{id:+el.dataset.unblock}).then(r=>{SY.members=r.members||SY.members;SY.blocked=r.blocked||[];refreshShareUI();toast('Доступ возвращён.');}).catch(()=>toast('Не получилось.'));return;}
   if((el=t.closest('[data-untrash]'))){const it=(SY.trash||[])[+el.dataset.untrash];if(!it)return;api('restore',{key:it.key,at:it.at}).then(()=>{setBody(it.key,it.body);saveLocal();openTrash();render();toast('Возвращено.');}).catch(()=>toast('Не получилось.'));return;}
   if((el=t.closest('[data-restoreb]'))){const it=(SY.bk||[])[+el.dataset.restoreb];if(!it)return;confirmBox({title:'Восстановить копию?',text:'Все данные станут как в копии «'+esc(it.name.replace(/\.json$/,''))+'». Текущее состояние перед этим сохранится.',protect:true,ok:'Восстановить',onOk:()=>{api('restore_backup',{id:it.id}).then(()=>{resyncAll();closeSheet();toast('Восстановлено.');}).catch(()=>toast('Не получилось.'));}});return;}
