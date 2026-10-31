@@ -608,7 +608,7 @@ const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLL
 let SRV=SYNC_URL; // сервер, с которым работаем: основной или личный сервер пользователя
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='3.0';
+const APP_VER='3.1';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -2259,7 +2259,7 @@ function streakOf(){let n=0;let d=ymd(today());if(!dayItems(d).length)d=addDays(
 
 /* ---------- экран «Питание» ---------- */
 function foodHTML(){const p=curP();setTimeout(fdbLoad,0);
-  const segs=[['diary','Дневник'],['rep','Отчёт'],['lib','Мои продукты']];if(canFeed())segs.push(['fam','Близкие']);if(foodSeg==='fam'&&!canFeed())foodSeg='diary';
+  const segs=[['diary','Дневник'],['rep','Отчёт'],['lib','Мои продукты']];if(canFeed())segs.push(['fam','Друзья']);if(foodSeg==='fam'&&!canFeed())foodSeg='diary';
   let h='<div class="seg" role="group">'+segs.map(([k,l])=>'<button type="button" data-fseg="'+k+'" aria-pressed="'+(foodSeg===k)+'">'+l+'</button>').join('')+'</div>';
   if(foodSeg==='rep')return h+reportHTML(p);
   if(foodSeg==='lib')return h+libHTML();
@@ -2305,11 +2305,11 @@ function addLists(){const U=usage();const q=nrm(FD.q);const words=q?q.split(' ')
     const u=Object.values(U).filter(x=>!x.it.ref&&hit(x.it.name)).map(x=>srcFromItem(x.it));
     const b=FOODBASE.filter(f=>hit(f.name)).sort((x,y)=>score(x.name)-score(y.name)).map(srcOf);
     const br=fdbSearch(q,words,40);const sh=shlSearch(words,hit);
-    return {groups:[['Мои продукты и рецепты',a.concat(u)],['От близких',sh],['Блюда и базовые продукты',b.slice(0,br.length?15:40)],['Продукты и бренды',br]].concat(FD.off&&FD.offQ===FD.q?[['Ещё из Open Food Facts',FD.off.filter(o=>!br.some(x=>x.off.code&&x.off.code===o.off.code))]]:[]),U};}
+    return {groups:[['Мои продукты и рецепты',a.concat(u)],['От друзей',sh],['Блюда и базовые продукты',b.slice(0,br.length?15:40)],['Продукты и бренды',br]].concat(FD.off&&FD.offQ===FD.q?[['Ещё из Open Food Facts',FD.off.filter(o=>!br.some(x=>x.off.code&&x.off.code===o.off.code))]]:[]),U};}
   if(FD.seg==='freq'){const arr=Object.values(U).sort((x,y)=>{const mx=(y.meals[FD.meal]||0)-(x.meals[FD.meal]||0);return (y.n+(y.meals[FD.meal]||0)*2)-(x.n+(x.meals[FD.meal]||0)*2)||mx;}).slice(0,30).map(x=>Object.assign(srcFromItem(x.it),{n:x.n}));
     const favs=mine.filter(s=>s.fav&&!arr.some(a=>a.ref===s.ref));return {groups:[['Избранное',favs],['Часто едите',arr]],U};}
   if(FD.seg==='mine')return {groups:[['Мои продукты',mine.filter(s=>s.kind!=='recipe').sort((a,b)=>(b.fav-a.fav)||a.name.localeCompare(b.name,'ru'))]],U};
-  if(FD.seg==='shl')return {groups:[['Рецепты близких',shlSearch([],()=>true).filter(x=>x.shl.m.kind==='recipe')],['Продукты близких',shlSearch([],()=>true).filter(x=>x.shl.m.kind!=='recipe')]],U};
+  if(FD.seg==='shl')return {groups:[['Рецепты друзей',shlSearch([],()=>true).filter(x=>x.shl.m.kind==='recipe')],['Продукты друзей',shlSearch([],()=>true).filter(x=>x.shl.m.kind!=='recipe')]],U};
   if(FD.seg==='rec')return {groups:[['Рецепты',mine.filter(s=>s.kind==='recipe').sort((a,b)=>(b.fav-a.fav)||a.name.localeCompare(b.name,'ru'))]],U};
   const cats={};FOODBASE.forEach(f=>{(cats[f.cat]=cats[f.cat]||[]).push(srcOf(f));});return {groups:Object.entries(cats),U};}
 function addBodyHTML(){const L=addLists();FD.list=[];
@@ -2323,7 +2323,7 @@ function renderFoodAdd(){const d=foodDate;const inMeal=dayItems(d).filter(i=>i.m
     '<div class="seg" role="group">'+MEALS.map(([m,n])=>'<button type="button" data-fmeal="'+m+'" aria-pressed="'+(FD.meal===m)+'">'+n+'</button>').join('')+'</div>'+(inMeal.length?'<div class="fsum"><span>'+MEAL_N[FD.meal]+': '+inMeal.length+' · <b>'+r0(s.k)+' ккал</b></span><button type="button" class="btn sm primary" data-close>Готово</button></div>':'');
   openSheet(topF(FD.pick?'Ингредиент':MEAL_N[FD.meal]+' · '+fmtDs(d),FD.pick?'data-fback="recipe"':'data-close')+'<div class="stack">'+head+
     '<div class="fsrch"><input class="inp" type="search" data-fq placeholder="Поиск продукта или блюда" value="'+esc(FD.q)+'" autocomplete="off" enterkeyhint="search"><button type="button" class="iconbtn" data-fscan aria-label="Сканировать штрихкод">'+SCAN_IC+'</button></div>'+
-    '<div class="seg" role="group" id="fsegw"'+(FD.q?' hidden':'')+'>'+[['freq','Частые'],['mine','Мои'],['rec','Рецепты'],['base','База']].concat(shlList().length?[['shl','Близких']]:[]).map(([k,l])=>'<button type="button" data-fsg="'+k+'" aria-pressed="'+(FD.seg===k)+'">'+l+'</button>').join('')+'</div>'+
+    '<div class="seg" role="group" id="fsegw"'+(FD.q?' hidden':'')+'>'+[['freq','Частые'],['mine','Мои'],['rec','Рецепты'],['base','База']].concat(shlList().length?[['shl','Друзей']]:[]).map(([k,l])=>'<button type="button" data-fsg="'+k+'" aria-pressed="'+(FD.seg===k)+'">'+l+'</button>').join('')+'</div>'+
     '<div id="fres" class="stack" style="gap:8px">'+addBodyHTML()+'</div>'+
     '<div class="row" style="gap:8px;justify-content:center"><button type="button" class="btn sm" data-fnew="food">+ Продукт</button>'+(FD.pick?'':'<button type="button" class="btn sm" data-fnew="recipe">+ Рецепт</button>'+(SY.ai?'<label class="btn sm" style="position:relative">📷 Еда по фото<input type="file" accept="image/*" data-fdish style="position:absolute;inset:0;opacity:0"></label>':''))+'</div></div>','fadd');}
 function refreshAddResults(){if(sheetKind!=='fadd'||sheet.hidden)return;const el=$('#fres');if(!el){renderFoodAdd();return;}el.innerHTML=addBodyHTML();const sg=$('#fsegw');if(sg)sg.hidden=!!FD.q;}
@@ -2410,7 +2410,7 @@ function libListHTML(){if(libSeg==='shl')return shlLibHTML();const q=nrm(libQ);l
   if(!arr.length)return '<section class="card"><div class="empty">'+(myFoods().length?'Ничего не нашлось.':'Здесь будут ваши продукты (со штрихкодами и своими порциями) и рецепты. Продукты, найденные по штрихкоду, сохраняются сюда сами.')+'</div></section>';
   return '<section class="card" style="padding:4px 14px"><div class="list">'+arr.map(f=>{const u=U[f.id];return '<div class="frow" data-fedit="'+f.id+'">'+(f.photo?'<img class="fph" src="'+f.photo+'" alt="">':'<span class="fph">'+(f.kind==='recipe'?'🥘':f.code?'🏷':'🥫')+'</span>')+'<div style="min-width:0"><div class="t">'+esc(f.name)+(f.fav?' <span style="color:#e2a400">★</span>':'')+'</div><div class="s">'+(f.from?'от '+esc(f.from)+' · ':'')+(f.brand?esc(f.brand)+' · ':'')+r0(f.per.k)+' ккал/100 г'+(f.kind==='recipe'?' · '+(f.ings||[]).length+' ингр.':'')+(u?' · ел '+u.n+'×':'')+'</div></div><div class="r muted">›</div></div>';}).join('')+'</div></section>';}
 function libHTML(){try{shlLoad();}catch(e){}return '<div class="fsrch"><input class="inp" type="search" data-flibq placeholder="Найти свой продукт" value="'+esc(libQ)+'"><button type="button" class="iconbtn" data-fscan aria-label="Сканировать">'+SCAN_IC+'</button></div>'+
-    '<div class="row" style="gap:8px"><button type="button" class="btn sm primary" data-fnew="food">+ Продукт</button><button type="button" class="btn sm primary" data-fnew="recipe">+ Рецепт</button></div><div class="seg" role="group">'+[['all','Все'],['food','Продукты'],['rec','Рецепты']].concat(canShare()?[['shl','От близких']]:[]).map(([k,l])=>'<button type="button" data-flseg="'+k+'" aria-pressed="'+(libSeg===k)+'">'+l+'</button>').join('')+'</div><div id="flib">'+libListHTML()+'</div>';}
+    '<div class="row" style="gap:8px"><button type="button" class="btn sm primary" data-fnew="food">+ Продукт</button><button type="button" class="btn sm primary" data-fnew="recipe">+ Рецепт</button></div><div class="seg" role="group">'+[['all','Все'],['food','Продукты'],['rec','Рецепты']].concat(canShare()?[['shl','От друзей']]:[]).map(([k,l])=>'<button type="button" data-flseg="'+k+'" aria-pressed="'+(libSeg===k)+'">'+l+'</button>').join('')+'</div><div id="flib">'+libListHTML()+'</div>';}
 
 /* ---------- отчёт за неделю ---------- */
 function weekDays(){const mon=addDays(mondayOf(ymd(today())),-7*repWeek);return [0,1,2,3,4,5,6].map(i=>addDays(mon,i));}
@@ -2614,7 +2614,7 @@ document.addEventListener('change',e=>{const t=e.target;
 });
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.fq!==undefined){e.preventDefault();if(FD.q)runOffSearch();}if(e.key==='Escape')closeScan();});
 
-/* ---------- Родные и друзья: приглашение, выбор сервера, личный сервер ---------- */
+/* ---------- Друзья: приглашение, выбор сервера, личный сервер ---------- */
 const OWN_RE=/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec\/?$|^http:\/\/127\.0\.0\.1:\d+\/$/;
 const SERVER_CODE_URL='https://yradkin.github.io/metrika/server.txt';
 function cloudGet(k){return new Promise(res=>{try{if(TGA&&TGA.CloudStorage&&TGA.isVersionAtLeast&&TGA.isVersionAtLeast('6.9'))TGA.CloudStorage.getItem(k,(e,v)=>res(e?null:v||null));else res(null);}catch(e){res(null);}});}
@@ -2627,7 +2627,7 @@ function inviteHTML(){const I=SY.invite||{};const share=lsGet('metrika-share')!=
   return '<section class="hero"><div class="names">'+APP_NAME+'</div><div class="when">'+esc(I.from||'Вас')+' '+(I.from?'приглашает вас':'приглашены')+'. Анализы, документы, вес и питание — в одном месте. Как будем хранить ваши данные?</div></section>'+
    '<section class="card"><div class="h"><h2>Простой вариант</h2><span class="pill p-good">1 минута</span></div><p class="small" style="margin:0 0 12px;color:var(--txt-2)">Всё готово сразу — откройте и пользуйтесь. Данные хранятся на основном сервере'+(I.from?' — его ведёт '+esc(I.from):'')+'.</p><button type="button" class="btn primary block big-cta" data-join="hub">Начать</button></section>'+
    '<section class="card"><div class="h"><h2>Личный сервер</h2><span class="pill p-acc">≈15 минут</span></div><p class="small" style="margin:0 0 12px;color:var(--txt-2)">Больше шагов, нужен компьютер. Зато у вас будет личный сервер в вашем Google-аккаунте, и все ваши файлы и данные будут у вас.</p><button type="button" class="btn block" data-join="own">Настроить личный сервер</button></section>'+
-   '<label class="card row" style="flex-wrap:nowrap;gap:12px;cursor:pointer"><input type="checkbox" data-share-def '+(share?'checked':'')+' style="width:22px;height:22px;flex:none"><span><b>Показывать близким мой прогресс</b><br><span class="small muted">Калории за день и вес — во вкладке «Близкие», можно ставить реакции. Анализы и документы не видит никто. Можно выключить в любой момент.</span></span></label>';}
+   '<label class="card row" style="flex-wrap:nowrap;gap:12px;cursor:pointer"><input type="checkbox" data-share-def '+(share?'checked':'')+' style="width:22px;height:22px;flex:none"><span><b>Показывать друзьям мой прогресс</b><br><span class="small muted">Калории за день и вес — во вкладке «Друзья», можно ставить реакции. Анализы и документы не видит никто. Можно выключить в любой момент.</span></span></label>';}
 function ownSetupHTML(){const from=ownerName();
   return '<section class="hero"><div class="names">Личный сервер</div><div class="when">Один раз на компьютере, около 15 минут. Сервер будет в вашем Google-аккаунте, бесплатно.</div></section>'+
    '<section class="card"><ol class="steps">'+
@@ -2649,20 +2649,22 @@ async function toHub(){try{saveServer('');await api('plan',{plan:'hub'});toast('
 function planCard(){if(!SY.ready||!(SY.tenant||SY.personal))return '';
   if(SY.personal)return '<section class="card"><div class="h"><h2>Личный сервер</h2><span class="pill p-good">подключён</span></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Ваши данные и файлы хранятся в вашем Google-аккаунте, в папке «Метрика». Резервная копия обновляется автоматически.</p><button type="button" class="btn sm ghost" data-act="tohub">Перейти на простой вариант</button></section>';
   return '<section class="card"><div class="h"><h2>Где хранятся данные</h2><span class="pill p-acc">простой вариант</span></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Данные хранятся на основном сервере. Можно в любой момент перейти на личный сервер — всё уже внесённое перенесётся.</p><button type="button" class="btn sm" data-act="toown">Перейти на личный сервер</button></section>';}
-/* у владельца: приглашения и список близких */
+/* у владельца: приглашения и список друзей */
 function familyCard(){if(!(SY.ready&&SY.owner&&SY.hub))return '';const ts=SY.members.filter(m=>m.tenant);const inv=(SY.invites||[]).filter(x=>!x.used);
-  return '<section class="card" id="famCard"><div class="h"><h2>Родные и друзья</h2>'+(ts.length?'<span class="pill p-acc">'+ts.length+'</span>':'')+'</div>'+
-   '<p class="small" style="margin:0 0 10px;color:var(--txt-2)">У каждого своё отдельное пространство: свои анализы, документы и питание. Друг друга и ваши данные они не видят — кроме общего прогресса во вкладке «Близкие», если человек его включил.</p>'+
+  return '<section class="card" id="famCard"><div class="h"><h2>Друзья</h2>'+(ts.length?'<span class="pill p-acc">'+ts.length+'</span>':'')+'</div>'+
+   '<p class="small" style="margin:0 0 10px;color:var(--txt-2)">У каждого своё отдельное пространство: свои анализы, документы и питание. Друг друга и ваши данные они не видят — кроме общего прогресса во вкладке «Друзья», если человек его включил.</p>'+
    (ts.length?'<div class="list">'+ts.map(m=>'<div class="li" style="cursor:default"><span class="mono" style="width:34px;height:34px;font-size:12px">'+esc(initials(m.name))+'</span><div><div class="t">'+esc(m.name)+(m.invited&&m.invited!==m.name?' <span class="muted">· '+esc(m.invited)+'</span>':'')+'</div><div class="s">'+(m.plan==='own'?(m.linkedAt?'личный сервер · копия '+(m.mirrorAt?fmtAgo(m.mirrorAt):'ещё не приходила'):'личный сервер · ещё не подключён'):'простой вариант')+'</div></div><div class="r"><button type="button" class="btn sm ghost" data-kick="'+m.id+'">Закрыть доступ</button></div></div>').join('')+'</div>':'')+
-   '<div class="row" style="flex-wrap:nowrap;gap:8px;margin-top:10px"><input class="inp" id="invname" placeholder="Кого пригласить: например, Мама" autocomplete="off"><button type="button" class="btn primary" data-act="invnew">Пригласить</button></div>'+
-   (SY.lastInvite?'<div class="invbox"><div class="small muted">Отправьте эту ссылку — по ней откроется «Метрика» с приглашением. Код: <b>'+esc(SY.lastInvite.code)+'</b></div><div class="mono-link">'+esc(SY.lastInvite.link)+'</div><div class="row" style="gap:6px"><button type="button" class="btn sm primary" data-act="invshare">Отправить в Telegram</button><button type="button" class="btn sm" data-copy="'+esc(SY.lastInvite.link)+'">Скопировать</button></div></div>':'')+
+   inviteBlockHTML()+
    (inv.length?'<div class="small muted" style="margin-top:10px">Ждут ответа: '+inv.map(x=>esc(x.name)+' (<span class="mono-i">'+esc(x.code)+'</span>) <button type="button" class="nlink" data-invdel="'+esc(x.code)+'" style="padding:0">отменить</button>').join(', ')+'</div>':'')+'</section>';}
+function inviteBlockHTML(){return '<div class="row" style="flex-wrap:nowrap;gap:8px;margin-top:10px"><input class="inp" id="invname" placeholder="Кого пригласить: например, Мама" autocomplete="off"><button type="button" class="btn primary" data-act="invnew">Пригласить</button></div>'+
+   (SY.lastInvite?'<div class="invbox"><div class="small muted">Отправьте эту ссылку — по ней откроется «Метрика» с приглашением. Код: <b>'+esc(SY.lastInvite.code)+'</b></div><div class="mono-link">'+esc(SY.lastInvite.link)+'</div><div class="row" style="gap:6px"><button type="button" class="btn sm primary" data-act="invshare">Отправить в Telegram</button><button type="button" class="btn sm" data-copy="'+esc(SY.lastInvite.link)+'">Скопировать</button></div></div>':'');}
+function friendsInviteCard(n){if(!(SY.owner&&SY.hub))return '';return '<section class="card"><div class="h"><h2>'+(n?'Пригласить ещё':'Пригласите друзей')+'</h2></div><p class="small" style="margin:0;color:var(--txt-2)">'+(n?'Каждый получает своё пространство и видит здесь общий прогресс.':'Здесь будет общий прогресс: калории, вес, по желанию — здоровье, и реакции. Пригласите человека — как только он откроет ссылку и выберет вариант, он появится здесь. Друг у друга видны только калории, вес и то, чем человек решил поделиться.')+'</p>'+inviteBlockHTML()+'</section>';}
 function refreshFamilyUI(){const el=$('#famCard');if(el)el.outerHTML=familyCard();}
 function loadInvites(){if(!(SY.ready&&SY.owner&&SY.hub))return;api('invites').then(r=>{SY.invites=r.invites||[];SY.bot=r.bot||SY.bot;if(r.members)SY.members=r.members;refreshFamilyUI();}).catch(()=>{});}
 function copyText(t){const done=()=>toast('Скопировано.');try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done).catch(()=>fallback());return;}}catch(e){}fallback();
   function fallback(){const a=document.createElement('textarea');a.value=t;a.style.cssText='position:fixed;opacity:0';document.body.appendChild(a);a.select();try{document.execCommand('copy');done();}catch(e){toast(t);}a.remove();}}
 
-/* ---------- прогресс для близких: короткая сводка (калории по дням, вес) ---------- */
+/* ---------- прогресс для друзей: короткая сводка (калории по дням, вес) ---------- */
 let sumT=0;function queueSummary(ms){if(!(SY.ready&&!SY.ro&&(SY.tenant||SY.personal||SY.hub)))return;clearTimeout(sumT);sumT=setTimeout(()=>{if(!curP())return;queueKey('s_me');},ms||3000);}
 function shareOn(p){return p&&p.share!=null?p.share!==false:lsGet('metrika-share')!=='0';}
 function buildSummary(){const p=curP();if(!p)return null;const G=foodGoal(p);const t=ymd(today());const days=[];
@@ -2670,7 +2672,7 @@ function buildSummary(){const p=curP();if(!p)return null;const G=foodGoal(p);con
   const cut=addDays(t,-120);let ws=wlogGet(p).filter(w=>w.date>=cut).map(w=>({d:w.date,kg:w.kg}));if(ws.length>40){const step=ws.length/40;ws=ws.filter((w,i)=>i===ws.length-1||Math.floor(i/step)!==Math.floor((i+1)/step));}
   let h=null;try{h=healthSummary(p);}catch(e){}
   return {name:p.name,photo:p.photo&&p.photo.length<30000?p.photo:'',share:shareOn(p),goal:G.k,streak:streakOf(),days,w:ws,h,at:Date.now()};}
-/* здоровье для близких — только если человек сам включил: «кратко» или «подробно» */
+/* здоровье для друзей — только если человек сам включил: «кратко» или «подробно» */
 function healthSummary(p){const lv=p.shareHealth||'off';if(lv==='off')return null;const ys=systemsOf(p).filter(y=>y.st!=='none');
   const ck=checkupOf(p).filter(r=>r.st==='over').length;const o={lv,sys:ys.map(y=>({n:y.S.n,ic:y.S.ic,st:y.st})),ck};
   if(lv==='full'){const outs=[];ys.forEach(y=>y.outs.forEach(z=>{const it=z.x.last;if(!outs.some(q=>q.n===z.x.name))outs.push({n:z.x.name,v:it.value,u:it.unit||'',d:it.date,s:z.s});}));o.outs=outs.slice(0,20);}
@@ -2680,22 +2682,25 @@ function healthHTML(h){if(!h||!h.sys)return '';const bad=h.sys.filter(y=>y.st!==
    (h.ck?'<div class="small muted" style="margin-top:6px">Просрочено плановых обследований: '+h.ck+'</div>':'')+
    (h.outs&&h.outs.length?'<details style="margin-top:6px"><summary class="small" style="cursor:pointer">Показатели вне нормы: '+h.outs.length+'</summary><div style="margin-top:4px">'+h.outs.map(o=>'<div class="small">'+esc(o.n)+': <b class="st-'+o.s+'">'+esc(num(o.v)!=null?fmtN(num(o.v)):o.v)+'</b> '+esc(o.u)+' <span class="muted">· '+fmtDs(o.d)+'</span></div>').join('')+'</div></details>':'')+'</div>';}
 function healthShareCard(p){const v=p.shareHealth;const seg='<div class="seg" role="group">'+[['off','Не делиться'],['brief','Кратко'],['full','Подробно']].map(([k,l])=>'<button type="button" data-hshare="'+k+'" aria-pressed="'+((v||'off')===k)+'">'+l+'</button>').join('')+'</div>';
-  const expl='<p class="small muted" style="margin:8px 0 0">Кратко — светофор по системам организма и сколько плановых обследований просрочено. Подробно — ещё и какие показатели вне нормы, со значениями. Документы и бланки близкие не видят.</p>';
-  if(v===undefined)return '<section class="card" style="border-color:var(--accent)"><div class="h"><h2>Поделиться состоянием здоровья?</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Близкие увидят, всё ли у вас в порядке, и смогут поддержать. Решаете вы, изменить можно в любой момент.</p>'+seg+expl+'</section>';
-  return '<section class="card"><div class="h"><h2>Моё здоровье для близких</h2></div>'+seg+expl+'</section>';}
+  const expl='<p class="small muted" style="margin:8px 0 0">Кратко — светофор по системам организма и сколько плановых обследований просрочено. Подробно — ещё и какие показатели вне нормы, со значениями. Документы и бланки друзья не видят.</p>';
+  if(v===undefined)return '<section class="card" style="border-color:var(--accent)"><div class="h"><h2>Поделиться состоянием здоровья?</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Друзья увидят, всё ли у вас в порядке, и смогут поддержать. Решаете вы, изменить можно в любой момент.</p>'+seg+expl+'</section>';
+  return '<section class="card"><div class="h"><h2>Моё здоровье для друзей</h2></div>'+seg+expl+'</section>';}
 function canShare(){return canFeed();}
-function canFeed(){return SY.ready&&(SY.tenant||SY.personal||(SY.owner&&SY.hub&&SY.members.some(m=>m.tenant)));}
+function canFeed(){return SY.ready&&(SY.tenant||SY.personal||(SY.owner&&SY.hub));}
 async function loadFeed(force){if(!canFeed()||SY.feedBusy)return;if(!force&&Date.now()-(SY.feedTry||0)<(SY.feed?60000:15000))return;SY.feedTry=Date.now();SY.feedBusy=true;
   try{const r=await api('feed');SY.feed=r;SY.feedAt=Date.now();}catch(e){SY.feedErr=e.code==='bad_op'||e.code==='hub_down'?e.code:'fail';}finally{SY.feedBusy=false;}if(tab==='food'&&!(document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)&&view.contains(document.activeElement)))render();}
 const REACTS=['👍','🔥','💪','❤️','👏','🥗'];
-function famHTML2(){if(!SY.feed){loadFeed();return '<section class="card" style="text-align:center"><div class="spin"></div><p class="small muted" style="margin:8px 0 0">'+(SY.feedErr==='bad_op'?'Обновите сервер до v10.':SY.feedErr?'Не получилось загрузить. Проверьте связь.':'Загружаю прогресс близких…')+'</p></section>';}
+function famHTML2(){if(!SY.feed){loadFeed();return '<section class="card" style="text-align:center"><div class="spin"></div><p class="small muted" style="margin:8px 0 0">'+(SY.feedErr==='bad_op'?'Обновите сервер до v10.':SY.feedErr?'Не получилось загрузить. Проверьте связь.':'Загружаю прогресс друзей…')+'</p></section>';}
   setTimeout(()=>loadFeed(),0);const F=SY.feed;const myId=SY.me&&SY.me.id;const p=curP();
-  let h='';if(!shareOn(p))h+='<section class="card"><p class="small" style="margin:0 0 10px">Ваш прогресс близким сейчас не виден.</p><button type="button" class="btn sm primary" data-act="shareon">Показывать мой прогресс</button></section>';
+  let h='';if(!shareOn(p))h+='<section class="card"><p class="small" style="margin:0 0 10px">Ваш прогресс друзьям сейчас не виден.</p><button type="button" class="btn sm primary" data-act="shareon">Показывать мой прогресс</button></section>';
   const ppl=(F.people||[]).slice().sort((a,b)=>(b.me-a.me));if(p&&p.shareHealth===undefined)h=healthShareCard(p)+h;
-  if(!ppl.length)return h+'<section class="card"><div class="empty">Пока никто не поделился прогрессом. Как только близкие начнут вести дневник, их калории и вес появятся здесь.</div></section>';
+  const others=ppl.filter(x=>!x.me).length;const tenants=SY.owner?SY.members.filter(m=>m.tenant).length:others;
+  if(SY.owner&&SY.hub&&!tenants)return friendsInviteCard(0)+h+ppl.map(x=>personCard(x,F.reacts||[],myId)).join('');
+  if(!ppl.length)return h+'<section class="card"><div class="empty">Пока никто не поделился прогрессом. Как только друзья начнут вести дневник, их калории и вес появятся здесь.</div></section>'+friendsInviteCard(tenants);
   ppl.forEach(x=>{h+=personCard(x,F.reacts||[],myId);});
+  if(SY.owner&&SY.hub)h+=friendsInviteCard(tenants);
   if(p&&p.shareHealth!==undefined)h+=healthShareCard(p);
-  if(shareOn(p))h+='<button type="button" class="btn block ghost" data-act="shareoff">Скрыть мой прогресс от близких</button>';
+  if(shareOn(p))h+='<button type="button" class="btn block ghost" data-act="shareoff">Скрыть мой прогресс от друзей</button>';
   return h;}
 function personCard(x,reacts,myId){const s=x.s||{};const t=ymd(today());const last=(s.days||[]).slice(-1)[0];const day=last?last.d:t;const goal=s.goal||2000;
   const todayK=last&&last.d===t?last.k:0;const pct=Math.round(todayK/goal*100);
@@ -2732,9 +2737,9 @@ document.addEventListener('click',e=>{const t=e.target;let el;
     if(a==='ownskip'){api('plan',{plan:'hub'}).then(()=>{SY.state='';syncConnect();}).catch(()=>toast('Не получилось — проверьте связь.'));return;}
     if(a==='tohub'){confirmBox({title:'Перейти на простой вариант?',text:'Данные будут храниться на основном сервере — там уже есть их копия. Личный сервер останется в вашем Google-аккаунте, но приложение перестанет с ним работать.',ok:'Перейти',onOk:()=>{closeSheet();toHub();}});return;}
     if(a==='toown'){api('plan',{plan:'own'}).then(r=>{SY.mkey=r.mkey;closeSheet();SY.ready=false;SY.on=false;SY.state='ownsetup';render();window.scrollTo(0,0);}).catch(()=>toast('Не получилось — обновите сервер.'));return;}
-    if(a==='invnew'){const n=($('#invname')||{}).value||'';api('invite_new',{name:n.trim()}).then(r=>{SY.invites=r.invites||[];SY.bot=r.bot||SY.bot;SY.lastInvite={code:r.code,link:'https://t.me/'+(r.bot||'mymetricabot')+'?startapp=inv_'+r.code};refreshFamilyUI();haptic('ok');}).catch(er=>toast(er.code==='bad_op'?'Обновите сервер до v10.':'Не получилось.'));return;}
+    if(a==='invnew'){const n=($('#invname')||{}).value||'';api('invite_new',{name:n.trim()}).then(r=>{SY.invites=r.invites||[];SY.bot=r.bot||SY.bot;SY.lastInvite={code:r.code,link:'https://t.me/'+(r.bot||'mymetricabot')+'?startapp=inv_'+r.code};refreshFamilyUI();if(tab==='food'&&foodSeg==='fam'&&sheet.hidden)render();haptic('ok');}).catch(er=>toast(er.code==='bad_op'?'Обновите сервер до v10.':'Не получилось.'));return;}
     if(a==='invshare'&&SY.lastInvite){openUrl('https://t.me/share/url?url='+encodeURIComponent(SY.lastInvite.link)+'&text='+encodeURIComponent('Приглашаю в «Метрику» — анализы, вес и питание в одном месте. Код: '+SY.lastInvite.code));return;}
-    if(a==='shareon'||a==='shareoff'){const p=curP();p.share=a==='shareon';persist('p',p.id);lsSet('metrika-share',p.share?'1':'0');queueSummary(300);toast(p.share?'Близкие видят ваш прогресс.':'Прогресс скрыт.');setTimeout(()=>loadFeed(true),3000);render();return;}
+    if(a==='shareon'||a==='shareoff'){const p=curP();p.share=a==='shareon';persist('p',p.id);lsSet('metrika-share',p.share?'1':'0');queueSummary(300);toast(p.share?'Друзья видят ваш прогресс.':'Прогресс скрыт.');setTimeout(()=>loadFeed(true),3000);render();return;}
   }
 });
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.shareDef!==undefined){lsSet('metrika-share',t.checked?'1':'0');}});
@@ -2751,13 +2756,13 @@ function shlSearch(words,hit){return shlList().filter(x=>hit(x.m.name+' '+(x.m.b
 function saveSharedFood(x){const ex=myFoods().find(f=>f.srcKey===x.key);if(ex)return ex;const f=JSON.parse(JSON.stringify(x.m));f.id=uid();f.from=x.author;f.fromId=x.authorId;f.srcKey=x.key;f.created=Date.now();delete f.fav;delete f.shared;
   if(f.kind==='recipe')(f.ings||[]).forEach(i=>{i.ref='';});st.foods[f.id]=f;persist('m',f.id);toast('Сохранено в ваши продукты · автор: '+x.author);return f;}
 function shlLibHTML(){const q=nrm(libQ);const arr=shlList().filter(x=>!q||nrm(x.m.name+' '+(x.m.brand||'')+' '+x.author).includes(q)).sort((a,b)=>a.author.localeCompare(b.author,'ru')||a.m.name.localeCompare(b.m.name,'ru'));
-  if(!arr.length)return '<section class="card"><div class="empty">'+(SHL.busy?'Загружаю…':'Близкие пока не добавили своих продуктов и рецептов. Когда добавят — они появятся здесь с именем автора.')+'</div></section>';
-  return '<p class="small muted" style="margin:0 2px">Продукты и рецепты, которые завели близкие. Нажмите — сохраню копию к вам, с указанием автора.</p><section class="card" style="padding:4px 14px"><div class="list">'+arr.map(x=>{const f=x.m;return '<div class="frow" data-shl="'+esc(x.key)+'">'+(f.photo?'<img class="fph" src="'+f.photo+'" alt="">':'<span class="fph">'+(f.kind==='recipe'?'🥘':'👥')+'</span>')+'<div style="min-width:0"><div class="t">'+esc(f.name)+'</div><div class="s">👤 '+esc(x.author)+' · '+r0(f.per.k)+' ккал/100 г'+(f.kind==='recipe'?' · '+(f.ings||[]).length+' ингр.':'')+'</div></div><div class="r muted">+</div></div>';}).join('')+'</div></section>';}
+  if(!arr.length)return '<section class="card"><div class="empty">'+(SHL.busy?'Загружаю…':'Друзья пока не добавили своих продуктов и рецептов. Когда добавят — они появятся здесь с именем автора.')+'</div></section>';
+  return '<p class="small muted" style="margin:0 2px">Продукты и рецепты, которые завели друзья. Нажмите — сохраню копию к вам, с указанием автора.</p><section class="card" style="padding:4px 14px"><div class="list">'+arr.map(x=>{const f=x.m;return '<div class="frow" data-shl="'+esc(x.key)+'">'+(f.photo?'<img class="fph" src="'+f.photo+'" alt="">':'<span class="fph">'+(f.kind==='recipe'?'🥘':'👥')+'</span>')+'<div style="min-width:0"><div class="t">'+esc(f.name)+'</div><div class="s">👤 '+esc(x.author)+' · '+r0(f.per.k)+' ккал/100 г'+(f.kind==='recipe'?' · '+(f.ings||[]).length+' ингр.':'')+'</div></div><div class="r muted">+</div></div>';}).join('')+'</div></section>';}
 function shareToggle(f){if(!canShare())return '';if(f.from)return '<p class="small muted" style="margin:0 2px">Автор: <b>'+esc(f.from)+'</b>. Это ваша копия — изменения видны только вам.</p>';
-  return '<label class="card row" style="flex-wrap:nowrap;gap:12px;cursor:pointer;padding:12px 14px"><input type="checkbox" data-fshared '+(f.shared!==false?'checked':'')+' style="width:20px;height:20px;flex:none"><span class="small"><b>Видно близким</b> — появится в их поиске с вашим именем</span></label>';}
+  return '<label class="card row" style="flex-wrap:nowrap;gap:12px;cursor:pointer;padding:12px 14px"><input type="checkbox" data-fshared '+(f.shared!==false?'checked':'')+' style="width:20px;height:20px;flex:none"><span class="small"><b>Видно друзьям</b> — появится в их поиске с вашим именем</span></label>';}
 document.addEventListener('click',e=>{const t=e.target;let el;
   if((el=t.closest('[data-shl]'))){const x=SHL.items[el.dataset.shl];if(!x)return;const f=saveSharedFood(x);if(f.kind==='recipe')editRecipe(f.id);else editFood(f.id);return;}
-  if((el=t.closest('[data-hshare]'))){const p=curP();p.shareHealth=el.dataset.hshare;persist('p',p.id);queueSummary(300);toast(p.shareHealth==='off'?'Здоровье близким не показывается.':'Близкие увидят '+(p.shareHealth==='full'?'подробную':'краткую')+' оценку здоровья.');render();setTimeout(()=>loadFeed(true),3500);return;}
+  if((el=t.closest('[data-hshare]'))){const p=curP();p.shareHealth=el.dataset.hshare;persist('p',p.id);queueSummary(300);toast(p.shareHealth==='off'?'Здоровье друзьям не показывается.':'Друзья увидят '+(p.shareHealth==='full'?'подробную':'краткую')+' оценку здоровья.');render();setTimeout(()=>loadFeed(true),3500);return;}
 });
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.fshared!==undefined){const o=sheetKind==='frecipe'?FD.recipe:FD.food;if(o)o.shared=t.checked;}});
 
