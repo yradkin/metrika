@@ -489,6 +489,9 @@ body.dragmode{-webkit-user-select:none;user-select:none}
 .rx{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
 .rxb{appearance:none;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:5px 10px;font:inherit;font-size:15px;cursor:pointer;color:var(--txt)}
 .rxb.on{background:var(--accent-soft);border-color:var(--accent);font-weight:700}
+.hbox{margin-top:10px;padding:10px 12px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line)}
+.hchips{display:flex;flex-wrap:wrap;gap:6px}
+.hchip{display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:4px 9px;border-radius:999px;background:var(--surface);border:1px solid var(--line)}
 /* ===== Питание ===== */
 .iconbtn.me{padding:0;overflow:hidden;border-radius:50%}
 .iconbtn.me .av{width:100%;height:100%;font-size:12px}
@@ -605,7 +608,7 @@ const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLL
 let SRV=SYNC_URL; // сервер, с которым работаем: основной или личный сервер пользователя
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='2.9';
+const APP_VER='3.0';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -822,7 +825,7 @@ function setBody(k,b){if(k==='cfg'){if(b&&b.cfg)st.cfg=Object.assign({},st.cfg,b
   else if(k[0]==='d'){if(b&&b.d){b.d.files=Array.isArray(b.d.files)?b.d.files:[];st.docs[id]=b.d;}else delete st.docs[id];}
   else{if(b&&b.a){b.a.items=Array.isArray(b.a.items)?b.a.items:[];remap(b.a);st.tests[id]=b.a;}else delete st.tests[id];}}
 function applyDocs(docs,full){if(full){st.profiles={};st.tests={};st.docs={};st.foods={};st.days={};}Object.keys(docs).forEach(k=>setBody(k,docs[k]));saveLocal();}
-function persist(kind,id){const key=docKey(kind,id);saveLocal();if(kind==='f'||kind==='p'){try{queueSummary(4000);}catch(e){}}clearTimeout(S.timers[key]);S.timers[key]=setTimeout(()=>flush(key),500);try{scheduleExport();}catch(e){}}
+function persist(kind,id){const key=docKey(kind,id);saveLocal();if(kind==='f'||kind==='p'||kind==='a'||kind==='d'){try{queueSummary(4000);}catch(e){}}clearTimeout(S.timers[key]);S.timers[key]=setTimeout(()=>flush(key),500);try{scheduleExport();}catch(e){}}
 async function flush(key){
   if(SY.on){if(SY.ro)return;queueKey(key);return;}
   const body=bodyOf(key);
@@ -2228,7 +2231,7 @@ const mondayOf=d=>{const x=parseD(d);return ymd(new Date(x.getTime()-((x.getDay(
 const addDays=(d,n)=>{const x=parseD(d);x.setDate(x.getDate()+n);return ymd(x);};
 function mealNow(){const h=new Date().getHours();return h<11?'b':h<16?'l':h<21?'d':'s';}
 /* источник для ввода: продукт, рецепт, базовый продукт, найденный в OFF или прошлая запись */
-function srcOf(f){if(!f)return null;return {ref:f.id,name:f.name,brand:f.brand||'',per:f.per,units:f.units||[],kind:f.kind||'base',photo:f.photo||'',cat:f.cat||''};}
+function srcOf(f){if(!f)return null;return {ref:f.id,name:f.name,brand:f.brand||'',per:f.per,units:f.units||[],kind:f.kind||'base',photo:f.photo||'',cat:f.cat||'',from:f.from||''};}
 function srcFromItem(i){const f=i.ref&&(st.foods[i.ref]||BASE_BY[i.ref]);if(f)return srcOf(f);const g=+i.g||100;return {ref:'',name:i.name,brand:i.br||'',per:{k:r1(i.k/g*100),p:r1(i.p/g*100),f:r1(i.f/g*100),c:r1(i.c/g*100)},units:i.u&&i.u!=='г'&&i.q?[{n:i.u,g:r1(g/i.q)}]:[],kind:'item'};}
 /* частота использования за 120 дней: что ел чаще — наверху, с последней порцией */
 function usage(){const m={};const cut=addDays(ymd(today()),-120);
@@ -2290,22 +2293,23 @@ function foodHomeCard(p){const G=foodGoal(p);const d=ymd(today());const S=sumIte
     '<button type="button" class="fplus" data-fadd="'+mealNow()+'" data-fhome="1" aria-label="Добавить еду">'+ICON.plus+'</button></div></section>';}
 
 /* ---------- добавление: поиск, частые, мои, рецепты, база ---------- */
-function openFoodAdd(meal,keep){fdbLoad();if(meal)FD.meal=meal;if(!keep){FD.q='';FD.off=null;FD.offQ='';}FD.pick=FD.pick||false;renderFoodAdd();}
+function openFoodAdd(meal,keep){fdbLoad();try{shlLoad();}catch(e){}if(meal)FD.meal=meal;if(!keep){FD.q='';FD.off=null;FD.offQ='';}FD.pick=FD.pick||false;renderFoodAdd();}
 const CAT_EM={'Крупы и гарниры':'🍚','Хлеб и выпечка':'🍞','Молочные продукты и яйца':'🥛','Мясо и птица':'🍗','Рыба и морепродукты':'🐟','Овощи':'🥦','Фрукты и ягоды':'🍎','Орехи, семена, масла':'🥜','Сладкое и перекусы':'🍫','Супы':'🍜','Готовые блюда':'🍝','Напитки':'☕','Блюда из птицы':'🍗','Блюда из мяса':'🥩','Рыбные блюда':'🐟','Белорусская кухня':'🥔','Завтраки':'🍳','Салаты и закуски':'🥗','Гарниры':'🍚','Паста, пицца, Азия, фастфуд':'🍕','Выпечка и десерты':'🍰','Молочные продукты (ещё)':'🧀','Овощи, фрукты, орехи (ещё)':'🥕','Соусы':'🥫','Напитки (ещё)':'🥤'};
-const srcEmoji=s=>s.kind==='recipe'?'🥘':s.kind==='off'?'🌍':s.kind==='base'?(CAT_EM[s.cat]||'🍽'):s.kind==='food'?'🥫':'🕘';
+const srcEmoji=s=>s.shl?(s.shl.m.kind==='recipe'?'🥘':'👥'):s.kind==='recipe'?'🥘':s.kind==='off'?'🌍':s.kind==='base'?(CAT_EM[s.cat]||'🍽'):s.kind==='food'?'🥫':'🕘';
 function srcRow(s,extra,i){const a=extra&&extra.amt;const kc=a?r0(s.per.k*a.g/100):r0(s.per.k);
-  return '<div class="frow" data-fsrc="'+i+'">'+(s.photo?'<img class="fph" src="'+s.photo+'" alt="">':'<span class="fph">'+srcEmoji(s)+'</span>')+'<div style="min-width:0"><div class="t">'+esc(s.name)+(s.fav?' <span style="color:#e2a400">★</span>':'')+'</div><div class="s">'+(s.by?'🇧🇾 ':'')+(s.brand?esc(s.brand)+' · ':'')+(a?(a.u&&a.u!=='г'?fN(a.q)+' '+esc(a.u):fN(a.g)+' г')+' · '+kc+' ккал':'100 г · '+kc+' ккал')+(extra&&extra.n?' · '+extra.n+'×':'')+'</div></div><button type="button" class="fplus sm" data-fquick="'+i+'" aria-label="Добавить сразу">'+ICON.plus+'</button></div>';}
+  return '<div class="frow" data-fsrc="'+i+'">'+(s.photo?'<img class="fph" src="'+s.photo+'" alt="">':'<span class="fph">'+srcEmoji(s)+'</span>')+'<div style="min-width:0"><div class="t">'+esc(s.name)+(s.fav?' <span style="color:#e2a400">★</span>':'')+'</div><div class="s">'+(s.author?'👤 '+esc(s.author)+' · ':s.from?'от '+esc(s.from)+' · ':'')+(s.by?'🇧🇾 ':'')+(s.brand?esc(s.brand)+' · ':'')+(a?(a.u&&a.u!=='г'?fN(a.q)+' '+esc(a.u):fN(a.g)+' г')+' · '+kc+' ккал':'100 г · '+kc+' ккал')+(extra&&extra.n?' · '+extra.n+'×':'')+'</div></div><button type="button" class="fplus sm" data-fquick="'+i+'" aria-label="Добавить сразу">'+ICON.plus+'</button></div>';}
 function addLists(){const U=usage();const q=nrm(FD.q);const words=q?q.split(' ').map(stemW):[];const hit=n=>{const x=nrm(n);return words.every(w=>x.includes(w));};
   const score=n=>{const x=nrm(n);return (x.startsWith(q)?0:x.split(' ').some(w=>w.startsWith(words[0]))?1:2)*1000+x.length;};
   const mine=myFoods().map(f=>Object.assign(srcOf(f),{fav:!!f.fav}));
   if(q){const a=mine.filter(s=>hit(s.name+' '+s.brand)).sort((x,y)=>score(x.name)-score(y.name));
     const u=Object.values(U).filter(x=>!x.it.ref&&hit(x.it.name)).map(x=>srcFromItem(x.it));
     const b=FOODBASE.filter(f=>hit(f.name)).sort((x,y)=>score(x.name)-score(y.name)).map(srcOf);
-    const br=fdbSearch(q,words,40);
-    return {groups:[['Мои продукты и рецепты',a.concat(u)],['Блюда и базовые продукты',b.slice(0,br.length?15:40)],['Продукты и бренды',br]].concat(FD.off&&FD.offQ===FD.q?[['Ещё из Open Food Facts',FD.off.filter(o=>!br.some(x=>x.off.code&&x.off.code===o.off.code))]]:[]),U};}
+    const br=fdbSearch(q,words,40);const sh=shlSearch(words,hit);
+    return {groups:[['Мои продукты и рецепты',a.concat(u)],['От близких',sh],['Блюда и базовые продукты',b.slice(0,br.length?15:40)],['Продукты и бренды',br]].concat(FD.off&&FD.offQ===FD.q?[['Ещё из Open Food Facts',FD.off.filter(o=>!br.some(x=>x.off.code&&x.off.code===o.off.code))]]:[]),U};}
   if(FD.seg==='freq'){const arr=Object.values(U).sort((x,y)=>{const mx=(y.meals[FD.meal]||0)-(x.meals[FD.meal]||0);return (y.n+(y.meals[FD.meal]||0)*2)-(x.n+(x.meals[FD.meal]||0)*2)||mx;}).slice(0,30).map(x=>Object.assign(srcFromItem(x.it),{n:x.n}));
     const favs=mine.filter(s=>s.fav&&!arr.some(a=>a.ref===s.ref));return {groups:[['Избранное',favs],['Часто едите',arr]],U};}
   if(FD.seg==='mine')return {groups:[['Мои продукты',mine.filter(s=>s.kind!=='recipe').sort((a,b)=>(b.fav-a.fav)||a.name.localeCompare(b.name,'ru'))]],U};
+  if(FD.seg==='shl')return {groups:[['Рецепты близких',shlSearch([],()=>true).filter(x=>x.shl.m.kind==='recipe')],['Продукты близких',shlSearch([],()=>true).filter(x=>x.shl.m.kind!=='recipe')]],U};
   if(FD.seg==='rec')return {groups:[['Рецепты',mine.filter(s=>s.kind==='recipe').sort((a,b)=>(b.fav-a.fav)||a.name.localeCompare(b.name,'ru'))]],U};
   const cats={};FOODBASE.forEach(f=>{(cats[f.cat]=cats[f.cat]||[]).push(srcOf(f));});return {groups:Object.entries(cats),U};}
 function addBodyHTML(){const L=addLists();FD.list=[];
@@ -2319,14 +2323,14 @@ function renderFoodAdd(){const d=foodDate;const inMeal=dayItems(d).filter(i=>i.m
     '<div class="seg" role="group">'+MEALS.map(([m,n])=>'<button type="button" data-fmeal="'+m+'" aria-pressed="'+(FD.meal===m)+'">'+n+'</button>').join('')+'</div>'+(inMeal.length?'<div class="fsum"><span>'+MEAL_N[FD.meal]+': '+inMeal.length+' · <b>'+r0(s.k)+' ккал</b></span><button type="button" class="btn sm primary" data-close>Готово</button></div>':'');
   openSheet(topF(FD.pick?'Ингредиент':MEAL_N[FD.meal]+' · '+fmtDs(d),FD.pick?'data-fback="recipe"':'data-close')+'<div class="stack">'+head+
     '<div class="fsrch"><input class="inp" type="search" data-fq placeholder="Поиск продукта или блюда" value="'+esc(FD.q)+'" autocomplete="off" enterkeyhint="search"><button type="button" class="iconbtn" data-fscan aria-label="Сканировать штрихкод">'+SCAN_IC+'</button></div>'+
-    '<div class="seg" role="group" id="fsegw"'+(FD.q?' hidden':'')+'>'+[['freq','Частые'],['mine','Мои'],['rec','Рецепты'],['base','База']].map(([k,l])=>'<button type="button" data-fsg="'+k+'" aria-pressed="'+(FD.seg===k)+'">'+l+'</button>').join('')+'</div>'+
+    '<div class="seg" role="group" id="fsegw"'+(FD.q?' hidden':'')+'>'+[['freq','Частые'],['mine','Мои'],['rec','Рецепты'],['base','База']].concat(shlList().length?[['shl','Близких']]:[]).map(([k,l])=>'<button type="button" data-fsg="'+k+'" aria-pressed="'+(FD.seg===k)+'">'+l+'</button>').join('')+'</div>'+
     '<div id="fres" class="stack" style="gap:8px">'+addBodyHTML()+'</div>'+
     '<div class="row" style="gap:8px;justify-content:center"><button type="button" class="btn sm" data-fnew="food">+ Продукт</button>'+(FD.pick?'':'<button type="button" class="btn sm" data-fnew="recipe">+ Рецепт</button>'+(SY.ai?'<label class="btn sm" style="position:relative">📷 Еда по фото<input type="file" accept="image/*" data-fdish style="position:absolute;inset:0;opacity:0"></label>':''))+'</div></div>','fadd');}
-function refreshAddResults(){const el=$('#fres');if(!el||sheetKind!=='fadd'){renderFoodAdd();return;}el.innerHTML=addBodyHTML();const sg=$('#fsegw');if(sg)sg.hidden=!!FD.q;}
+function refreshAddResults(){if(sheetKind!=='fadd'||sheet.hidden)return;const el=$('#fres');if(!el){renderFoodAdd();return;}el.innerHTML=addBodyHTML();const sg=$('#fsegw');if(sg)sg.hidden=!!FD.q;}
 function topF(title,backAttr,right){return '<div class="sheet-top"><button type="button" class="iconbtn" '+backAttr+' aria-label="Назад">'+ICON.back+'</button><span class="ttl">'+esc(title)+'</span>'+(right||'<span style="width:40px"></span>')+'</div>';}
 function quickAdd(s){const a=lastAmount(s);if(FD.pick){addIng(s,a.g,a.q,a.u);return;}const it=addEntry(foodDate,FD.meal,s,a.g,a.q,a.u);haptic('ok');render();renderFoodAdd();
   toast('+ '+s.name+' · '+r0(it.k)+' ккал','Отменить',()=>{delEntry(foodDate,it.id);render();if(sheetKind==='fadd')renderFoodAdd();});}
-async function pickSrc(s){if(s.off){const f=saveOffFood(s.off);s=srcOf(f);}openAmount({src:s});}
+async function pickSrc(s){if(s.shl){const f=saveSharedFood(s.shl);s=srcOf(f);}else if(s.off){const f=saveOffFood(s.off);s=srcOf(f);}openAmount({src:s});}
 function saveOffFood(o){const ex=(o.code&&myFoods().find(f=>f.code===o.code))||myFoods().find(f=>f.src==='off'&&f.name===o.name&&(f.brand||'')===(o.brand||''));if(ex)return ex;const f={id:uid(),kind:'food',name:o.name||('Продукт '+o.code),brand:o.brand||'',code:o.code||'',per:o.per,units:o.units||[],src:'off',created:Date.now()};st.foods[f.id]=f;persist('m',f.id);return f;}
 
 /* ---------- количество ---------- */
@@ -2371,7 +2375,7 @@ function renderFoodForm(){const f=FD.food;const isNew=!st.foods[f.id];const pv=k
    '<div class="row" style="gap:10px;flex-wrap:nowrap"><div class="fld"><label>Марка</label><input data-ff="brand" value="'+esc(f.brand||'')+'" placeholder="Савушкин"></div><div class="fld"><label>Штрихкод</label><input data-ff="code" inputmode="numeric" value="'+esc(f.code||'')+'" placeholder="481…"></div></div></div></section>'+
    '<section class="card"><div class="h"><h2>На 100 г</h2></div><div class="nums4">'+[['k','Ккал'],['p','Белки'],['f','Жиры'],['c','Углев.']].map(([k,l])=>'<div class="fld"><label>'+l+'</label><input data-fper="'+k+'" inputmode="decimal" value="'+esc(pv(k))+'" placeholder="—"></div>').join('')+'</div><p class="note" style="margin:8px 0 0">Если калории не указаны, посчитаю по белкам, жирам и углеводам.</p></section>'+
    '<section class="card"><div class="h"><h2>Порции</h2><button type="button" class="link" data-funit>+ Добавить</button></div><div class="stack" style="gap:8px">'+(f.units.length?f.units.map((u,i)=>'<div class="row" style="flex-wrap:nowrap;gap:8px"><input class="inp" data-fun="'+i+'" value="'+esc(u.n)+'" placeholder="шт, порция, упаковка"><input class="inp" data-fug="'+i+'" inputmode="decimal" value="'+esc(u.g||'')+'" placeholder="г" style="max-width:90px"><span class="muted">г</span><button type="button" class="iconbtn" data-fudel="'+i+'" aria-label="Убрать">'+ICON.x+'</button></div>').join(''):'<div class="small muted">Например: 1 шт = 60 г, упаковка = 450 г — так вводить быстрее.</div>')+'</div></section>'+
-   '<button type="button" class="btn primary block big-cta" data-fsavefood>'+(FD.foodRet==='add'?'Сохранить и добавить':'Сохранить')+'</button></div>','ffood');}
+   shareToggle(f)+'<button type="button" class="btn primary block big-cta" data-fsavefood>'+(FD.foodRet==='add'?'Сохранить и добавить':'Сохранить')+'</button></div>','ffood');}
 function saveFood(){const f=FD.food;f.name=String(f.name||'').trim();if(!f.name){toast('Введите название.');return;}
   ['k','p','f','c'].forEach(k=>{f.per[k]=num(f.per[k])||0;});if(!f.per.k)f.per.k=r1(f.per.p*4+f.per.f*9+f.per.c*4);
   if(!f.per.k&&!f.per.p&&!f.per.f&&!f.per.c){toast('Укажите калорийность.');return;}
@@ -2391,7 +2395,7 @@ function renderRecipe(){FD.pick=false;FD.amount=null;const r=FD.recipe;const T=r
    '<button type="button" class="btn block" data-fingadd style="margin-top:10px">+ Ингредиент</button></section>'+
    '<section class="card"><div class="row" style="gap:10px;flex-wrap:nowrap"><div class="fld"><label>Порций</label><input data-fr="servings" inputmode="numeric" value="'+esc(r.servings||1)+'"></div><div class="fld"><label>Вес готового, г</label><input data-fr="yieldG" inputmode="decimal" value="'+esc(r.yieldG||'')+'" placeholder="'+r0(T.s.g)+'"></div></div><p class="note" style="margin:8px 0 0">Вес готового блюда меняется при варке и жарке. Если не знаете — оставьте пустым, возьму сумму ингредиентов.</p>'+
    '<div id="frtot" style="margin-top:12px">'+recTotHTML(T)+'</div></section>'+
-   '<button type="button" class="btn primary block big-cta" data-fsaverec>Сохранить рецепт</button></div>','frecipe');}
+   shareToggle(r)+'<button type="button" class="btn primary block big-cta" data-fsaverec>Сохранить рецепт</button></div>','frecipe');}
 function recTotHTML(T){return '<div class="ftot three"><div><b>'+r0(T.s.k)+'</b><span>ккал всего</span></div><div><b>'+r0(T.per.k*T.portion/100)+'</b><span>ккал в порции ('+r0(T.portion)+' г)</span></div><div><b>'+r0(T.per.k)+'</b><span>ккал на 100 г</span></div></div><div class="small muted" style="text-align:center;margin-top:6px">Порция: Б '+fN(r1(T.per.p*T.portion/100))+' · Ж '+fN(r1(T.per.f*T.portion/100))+' · У '+fN(r1(T.per.c*T.portion/100))+' г</div>';}
 function addIng(s,g,q,u){const r=FD.recipe;r.ings=r.ings||[];r.ings.push({ref:s.ref||'',name:s.name,per:s.per,g:r1(g),q:r1(q),u:u||'г',units:s.units||[]});FD.pick=false;renderRecipe();toast('+ '+s.name);}
 function saveRecipe(){const r=FD.recipe;r.name=String(r.name||'').trim();if(!r.name){toast('Введите название.');return;}if(!(r.ings||[]).length){toast('Добавьте ингредиенты.');return;}
@@ -2401,12 +2405,12 @@ function saveRecipe(){const r=FD.recipe;r.name=String(r.name||'').trim();if(!r.n
   st.foods[r.id]=r;persist('m',r.id);haptic('ok');FD.recipe=null;closeSheet();toast('Рецепт сохранён. Он есть во вкладке «Рецепты» при добавлении еды.');}
 
 /* ---------- мои продукты ---------- */
-function libListHTML(){const q=nrm(libQ);let arr=myFoods().filter(f=>!q||nrm(f.name+' '+(f.brand||'')).includes(q));if(libSeg!=='all')arr=arr.filter(f=>libSeg==='rec'?f.kind==='recipe':f.kind!=='recipe');
+function libListHTML(){if(libSeg==='shl')return shlLibHTML();const q=nrm(libQ);let arr=myFoods().filter(f=>!q||nrm(f.name+' '+(f.brand||'')).includes(q));if(libSeg!=='all')arr=arr.filter(f=>libSeg==='rec'?f.kind==='recipe':f.kind!=='recipe');
   arr.sort((a,b)=>(!!b.fav-!!a.fav)||a.name.localeCompare(b.name,'ru'));const U=usage();
   if(!arr.length)return '<section class="card"><div class="empty">'+(myFoods().length?'Ничего не нашлось.':'Здесь будут ваши продукты (со штрихкодами и своими порциями) и рецепты. Продукты, найденные по штрихкоду, сохраняются сюда сами.')+'</div></section>';
-  return '<section class="card" style="padding:4px 14px"><div class="list">'+arr.map(f=>{const u=U[f.id];return '<div class="frow" data-fedit="'+f.id+'">'+(f.photo?'<img class="fph" src="'+f.photo+'" alt="">':'<span class="fph">'+(f.kind==='recipe'?'🥘':f.code?'🏷':'🥫')+'</span>')+'<div style="min-width:0"><div class="t">'+esc(f.name)+(f.fav?' <span style="color:#e2a400">★</span>':'')+'</div><div class="s">'+(f.brand?esc(f.brand)+' · ':'')+r0(f.per.k)+' ккал/100 г'+(f.kind==='recipe'?' · '+(f.ings||[]).length+' ингр.':'')+(u?' · ел '+u.n+'×':'')+'</div></div><div class="r muted">›</div></div>';}).join('')+'</div></section>';}
-function libHTML(){return '<div class="fsrch"><input class="inp" type="search" data-flibq placeholder="Найти свой продукт" value="'+esc(libQ)+'"><button type="button" class="iconbtn" data-fscan aria-label="Сканировать">'+SCAN_IC+'</button></div>'+
-    '<div class="row" style="gap:8px"><button type="button" class="btn sm primary" data-fnew="food">+ Продукт</button><button type="button" class="btn sm primary" data-fnew="recipe">+ Рецепт</button><div class="seg" role="group" style="margin-left:auto">'+[['all','Все'],['food','Продукты'],['rec','Рецепты']].map(([k,l])=>'<button type="button" data-flseg="'+k+'" aria-pressed="'+(libSeg===k)+'">'+l+'</button>').join('')+'</div></div><div id="flib">'+libListHTML()+'</div>';}
+  return '<section class="card" style="padding:4px 14px"><div class="list">'+arr.map(f=>{const u=U[f.id];return '<div class="frow" data-fedit="'+f.id+'">'+(f.photo?'<img class="fph" src="'+f.photo+'" alt="">':'<span class="fph">'+(f.kind==='recipe'?'🥘':f.code?'🏷':'🥫')+'</span>')+'<div style="min-width:0"><div class="t">'+esc(f.name)+(f.fav?' <span style="color:#e2a400">★</span>':'')+'</div><div class="s">'+(f.from?'от '+esc(f.from)+' · ':'')+(f.brand?esc(f.brand)+' · ':'')+r0(f.per.k)+' ккал/100 г'+(f.kind==='recipe'?' · '+(f.ings||[]).length+' ингр.':'')+(u?' · ел '+u.n+'×':'')+'</div></div><div class="r muted">›</div></div>';}).join('')+'</div></section>';}
+function libHTML(){try{shlLoad();}catch(e){}return '<div class="fsrch"><input class="inp" type="search" data-flibq placeholder="Найти свой продукт" value="'+esc(libQ)+'"><button type="button" class="iconbtn" data-fscan aria-label="Сканировать">'+SCAN_IC+'</button></div>'+
+    '<div class="row" style="gap:8px"><button type="button" class="btn sm primary" data-fnew="food">+ Продукт</button><button type="button" class="btn sm primary" data-fnew="recipe">+ Рецепт</button></div><div class="seg" role="group">'+[['all','Все'],['food','Продукты'],['rec','Рецепты']].concat(canShare()?[['shl','От близких']]:[]).map(([k,l])=>'<button type="button" data-flseg="'+k+'" aria-pressed="'+(libSeg===k)+'">'+l+'</button>').join('')+'</div><div id="flib">'+libListHTML()+'</div>';}
 
 /* ---------- отчёт за неделю ---------- */
 function weekDays(){const mon=addDays(mondayOf(ymd(today())),-7*repWeek);return [0,1,2,3,4,5,6].map(i=>addDays(mon,i));}
@@ -2543,7 +2547,7 @@ function renderDish(){const D=FD.dish;const tot=sumItems(D.items.filter(i=>i.on)
 
 /* ---------- события питания ---------- */
 document.addEventListener('click',e=>{const t=e.target;let el;
-  if((el=t.closest('[data-fseg]'))){foodSeg=el.dataset.fseg;render();return;}
+  if((el=t.closest('[data-fseg]'))){foodSeg=el.dataset.fseg;render();if(foodSeg==='fam')loadFeed(true);return;}
   if((el=t.closest('[data-ftab]'))){tab='food';foodSeg='diary';foodDate=ymd(today());render();window.scrollTo(0,0);return;}
   if((el=t.closest('[data-fday]'))){foodDate=el.dataset.fday;render();return;}
   if((el=t.closest('[data-fcol]'))&&!t.closest('[data-fadd]')){const m=el.dataset.fcol;FD.collapsed[m]=!FD.collapsed[m];render();return;}
@@ -2553,7 +2557,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
   if((el=t.closest('[data-fent]'))){const [d,id]=el.dataset.fent.split('|');const it=dayItems(d).find(x=>x.id===id);if(!it)return;openAmount({src:srcFromItem(it),entry:it,date:d});return;}
   if((el=t.closest('[data-fmeal]'))){FD.meal=el.dataset.fmeal;renderFoodAdd();return;}
   if((el=t.closest('[data-fsg]'))){FD.seg=el.dataset.fsg;renderFoodAdd();return;}
-  if((el=t.closest('[data-fquick]'))){const s=FD.list[+el.dataset.fquick];if(!s)return;if(s.off){const f=saveOffFood(s.off);quickAdd(srcOf(f));return;}quickAdd(s);return;}
+  if((el=t.closest('[data-fquick]'))){const s=FD.list[+el.dataset.fquick];if(!s)return;if(s.shl){const f=saveSharedFood(s.shl);quickAdd(srcOf(f));return;}if(s.off){const f=saveOffFood(s.off);quickAdd(srcOf(f));return;}quickAdd(s);return;}
   if((el=t.closest('[data-fsrc]'))){const s=FD.list[+el.dataset.fsrc];if(s)pickSrc(s);return;}
   if((el=t.closest('[data-foff]'))){runOffSearch();return;}
   if((el=t.closest('[data-fback]'))){const w=el.dataset.fback;if(w==='recipe'&&FD.recipe){renderRecipe();return;}if(w==='add'){renderFoodAdd();return;}closeSheet();return;}
@@ -2664,7 +2668,22 @@ function shareOn(p){return p&&p.share!=null?p.share!==false:lsGet('metrika-share
 function buildSummary(){const p=curP();if(!p)return null;const G=foodGoal(p);const t=ymd(today());const days=[];
   for(let i=13;i>=0;i--){const d=addDays(t,-i);const its=dayItems(d);if(!its.length)continue;const s=sumItems(its);days.push({d,k:Math.round(s.k),p:Math.round(s.p),f:Math.round(s.f),c:Math.round(s.c)});}
   const cut=addDays(t,-120);let ws=wlogGet(p).filter(w=>w.date>=cut).map(w=>({d:w.date,kg:w.kg}));if(ws.length>40){const step=ws.length/40;ws=ws.filter((w,i)=>i===ws.length-1||Math.floor(i/step)!==Math.floor((i+1)/step));}
-  return {name:p.name,photo:p.photo&&p.photo.length<30000?p.photo:'',share:shareOn(p),goal:G.k,streak:streakOf(),days,w:ws,at:Date.now()};}
+  let h=null;try{h=healthSummary(p);}catch(e){}
+  return {name:p.name,photo:p.photo&&p.photo.length<30000?p.photo:'',share:shareOn(p),goal:G.k,streak:streakOf(),days,w:ws,h,at:Date.now()};}
+/* здоровье для близких — только если человек сам включил: «кратко» или «подробно» */
+function healthSummary(p){const lv=p.shareHealth||'off';if(lv==='off')return null;const ys=systemsOf(p).filter(y=>y.st!=='none');
+  const ck=checkupOf(p).filter(r=>r.st==='over').length;const o={lv,sys:ys.map(y=>({n:y.S.n,ic:y.S.ic,st:y.st})),ck};
+  if(lv==='full'){const outs=[];ys.forEach(y=>y.outs.forEach(z=>{const it=z.x.last;if(!outs.some(q=>q.n===z.x.name))outs.push({n:z.x.name,v:it.value,u:it.unit||'',d:it.date,s:z.s});}));o.outs=outs.slice(0,20);}
+  return o;}
+function healthHTML(h){if(!h||!h.sys)return '';const bad=h.sys.filter(y=>y.st!=='ok').length;
+  return '<div class="hbox"><div class="small" style="font-weight:700;margin-bottom:6px">Здоровье · '+(h.sys.length?(bad?bad+' '+plural(bad,'система требует','системы требуют','систем требуют')+' внимания':'всё в норме'):'пока нет анализов')+'</div><div class="hchips">'+h.sys.map(y=>'<span class="hchip"><i class="sdot" style="background:'+sysCol[y.st]+';margin:0 5px 0 0"></i>'+y.ic+' '+esc(y.n)+'</span>').join('')+'</div>'+
+   (h.ck?'<div class="small muted" style="margin-top:6px">Просрочено плановых обследований: '+h.ck+'</div>':'')+
+   (h.outs&&h.outs.length?'<details style="margin-top:6px"><summary class="small" style="cursor:pointer">Показатели вне нормы: '+h.outs.length+'</summary><div style="margin-top:4px">'+h.outs.map(o=>'<div class="small">'+esc(o.n)+': <b class="st-'+o.s+'">'+esc(num(o.v)!=null?fmtN(num(o.v)):o.v)+'</b> '+esc(o.u)+' <span class="muted">· '+fmtDs(o.d)+'</span></div>').join('')+'</div></details>':'')+'</div>';}
+function healthShareCard(p){const v=p.shareHealth;const seg='<div class="seg" role="group">'+[['off','Не делиться'],['brief','Кратко'],['full','Подробно']].map(([k,l])=>'<button type="button" data-hshare="'+k+'" aria-pressed="'+((v||'off')===k)+'">'+l+'</button>').join('')+'</div>';
+  const expl='<p class="small muted" style="margin:8px 0 0">Кратко — светофор по системам организма и сколько плановых обследований просрочено. Подробно — ещё и какие показатели вне нормы, со значениями. Документы и бланки близкие не видят.</p>';
+  if(v===undefined)return '<section class="card" style="border-color:var(--accent)"><div class="h"><h2>Поделиться состоянием здоровья?</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Близкие увидят, всё ли у вас в порядке, и смогут поддержать. Решаете вы, изменить можно в любой момент.</p>'+seg+expl+'</section>';
+  return '<section class="card"><div class="h"><h2>Моё здоровье для близких</h2></div>'+seg+expl+'</section>';}
+function canShare(){return canFeed();}
 function canFeed(){return SY.ready&&(SY.tenant||SY.personal||(SY.owner&&SY.hub&&SY.members.some(m=>m.tenant)));}
 async function loadFeed(force){if(!canFeed()||SY.feedBusy)return;if(!force&&Date.now()-(SY.feedTry||0)<(SY.feed?60000:15000))return;SY.feedTry=Date.now();SY.feedBusy=true;
   try{const r=await api('feed');SY.feed=r;SY.feedAt=Date.now();}catch(e){SY.feedErr=e.code==='bad_op'||e.code==='hub_down'?e.code:'fail';}finally{SY.feedBusy=false;}if(tab==='food'&&!(document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)&&view.contains(document.activeElement)))render();}
@@ -2672,9 +2691,10 @@ const REACTS=['👍','🔥','💪','❤️','👏','🥗'];
 function famHTML2(){if(!SY.feed){loadFeed();return '<section class="card" style="text-align:center"><div class="spin"></div><p class="small muted" style="margin:8px 0 0">'+(SY.feedErr==='bad_op'?'Обновите сервер до v10.':SY.feedErr?'Не получилось загрузить. Проверьте связь.':'Загружаю прогресс близких…')+'</p></section>';}
   setTimeout(()=>loadFeed(),0);const F=SY.feed;const myId=SY.me&&SY.me.id;const p=curP();
   let h='';if(!shareOn(p))h+='<section class="card"><p class="small" style="margin:0 0 10px">Ваш прогресс близким сейчас не виден.</p><button type="button" class="btn sm primary" data-act="shareon">Показывать мой прогресс</button></section>';
-  const ppl=(F.people||[]).slice().sort((a,b)=>(b.me-a.me));
+  const ppl=(F.people||[]).slice().sort((a,b)=>(b.me-a.me));if(p&&p.shareHealth===undefined)h=healthShareCard(p)+h;
   if(!ppl.length)return h+'<section class="card"><div class="empty">Пока никто не поделился прогрессом. Как только близкие начнут вести дневник, их калории и вес появятся здесь.</div></section>';
   ppl.forEach(x=>{h+=personCard(x,F.reacts||[],myId);});
+  if(p&&p.shareHealth!==undefined)h+=healthShareCard(p);
   if(shareOn(p))h+='<button type="button" class="btn block ghost" data-act="shareoff">Скрыть мой прогресс от близких</button>';
   return h;}
 function personCard(x,reacts,myId){const s=x.s||{};const t=ymd(today());const last=(s.days||[]).slice(-1)[0];const day=last?last.d:t;const goal=s.goal||2000;
@@ -2691,7 +2711,7 @@ function personCard(x,reacts,myId){const s=x.s||{};const t=ymd(today());const la
   return '<section class="card pcard"><div class="row" style="flex-wrap:nowrap;gap:10px">'+av+'<div style="min-width:0;flex:1"><div style="font-weight:700">'+esc(x.name)+(x.me?' <span class="muted" style="font-weight:600">· вы</span>':'')+'</div><div class="small muted">'+(s.streak>1?'🔥 '+s.streak+' '+plural(s.streak,'день','дня','дней')+' подряд':last?'последняя запись '+fmtDs(last.d):'пока без записей')+'</div></div>'+ring(todayK?pct:0,pct>110?'var(--crit)':'var(--accent)',48,'<b style="font-size:11px">'+(todayK?pct+'%':'—')+'</b>')+'</div>'+
    '<div class="small" style="margin-top:8px">Сегодня: <b>'+(todayK?todayK+' из '+goal+' ккал':'записей нет')+'</b></div>'+svg+
    (wl?'<div class="small" style="margin-top:2px">Вес: <b>'+fN(wl.kg)+' кг</b>'+(w7!=null?' · за неделю '+chg(w7):'')+(w30!=null?' · за месяц '+chg(w30):'')+'</div>':'')+
-   '<div class="rx"><span class="small muted">'+(day===t?'Сегодня':fmtDs(day))+':</span>'+REACTS.map(e=>{const l=cnt[e]||[];const mine=l.some(r=>r.from===myId);return x.me?(l.length?'<span class="rxb on" title="'+esc(l.map(r=>r.fromName).join(', '))+'">'+e+' '+l.length+'</span>':''):'<button type="button" class="rxb'+(mine?' on':'')+'" data-react="'+x.id+'|'+day+'|'+e+'">'+e+(l.length?' '+l.length:'')+'</button>';}).join('')+'</div>'+
+   healthHTML(s.h)+(x.me&&!rs.length?'':'<div class="rx"><span class="small muted">'+(day===t?'Сегодня':fmtDs(day))+':</span>'+REACTS.map(e=>{const l=cnt[e]||[];const mine=l.some(r=>r.from===myId);return x.me?(l.length?'<span class="rxb on" title="'+esc(l.map(r=>r.fromName).join(', '))+'">'+e+' '+l.length+'</span>':''):'<button type="button" class="rxb'+(mine?' on':'')+'" data-react="'+x.id+'|'+day+'|'+e+'">'+e+(l.length?' '+l.length:'')+'</button>';}).join('')+'</div>')+
    (rs.length?'<div class="small muted" style="margin-top:4px">'+Object.keys(cnt).map(e=>e+' '+cnt[e].map(r=>esc(r.fromName.split(' ')[0])).join(', ')).join(' · ')+'</div>':'')+'</section>';}
 /* реакции, которые получили вы за выбранный день — строкой в дневнике */
 function myReactsLine(d){if(!SY.feed||!SY.me)return '';const rs=(SY.feed.reacts||[]).filter(r=>r.to===SY.me.id&&r.day===d&&r.from!==SY.me.id);if(!rs.length)return '';
@@ -2718,6 +2738,28 @@ document.addEventListener('click',e=>{const t=e.target;let el;
   }
 });
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.shareDef!==undefined){lsSet('metrika-share',t.checked?'1':'0');}});
+
+/* ---------- общая библиотека продуктов и рецептов (с автором) ---------- */
+const SHL={items:{},since:0,loaded:false,busy:false,at:0};
+async function shlLoad(force){if(!canShare())return;if(!SHL.loaded){SHL.loaded=true;const v=await kvGet('sharedlib');if(v&&v.items){SHL.items=v.items;SHL.since=v.since||0;}}
+  if(SHL.busy||(!force&&Date.now()-SHL.at<120000))return;SHL.busy=true;SHL.at=Date.now();
+  try{const r=await api('lib',{since:SHL.since});(r.items||[]).forEach(x=>{if(x.del)delete SHL.items[x.key];else SHL.items[x.key]=x;});SHL.since=(r.now||Date.now())-1000;kvSet('sharedlib',{items:SHL.items,since:SHL.since});
+    if(sheetKind==='fadd')refreshAddResults();else if(tab==='food'&&foodSeg==='lib'&&sheet.hidden){const l=$('#flib');if(l)l.innerHTML=libListHTML();}}catch(e){}finally{SHL.busy=false;}}
+function shlList(){if(!canShare())return [];const mineKeys={};myFoods().forEach(f=>{if(f.srcKey)mineKeys[f.srcKey]=1;});return Object.values(SHL.items).filter(x=>x&&x.m&&x.m.per&&!mineKeys[x.key]&&(!SY.me||x.authorId!==SY.me.id));}
+function shlSrc(x){const f=x.m;return {ref:'',name:f.name,brand:f.brand||'',per:f.per,units:f.units||[],kind:'shared',photo:f.photo||'',author:x.author,shl:x};}
+function shlSearch(words,hit){return shlList().filter(x=>hit(x.m.name+' '+(x.m.brand||'')+' '+x.author)).sort((a,b)=>a.m.name.localeCompare(b.m.name,'ru')).slice(0,30).map(shlSrc);}
+function saveSharedFood(x){const ex=myFoods().find(f=>f.srcKey===x.key);if(ex)return ex;const f=JSON.parse(JSON.stringify(x.m));f.id=uid();f.from=x.author;f.fromId=x.authorId;f.srcKey=x.key;f.created=Date.now();delete f.fav;delete f.shared;
+  if(f.kind==='recipe')(f.ings||[]).forEach(i=>{i.ref='';});st.foods[f.id]=f;persist('m',f.id);toast('Сохранено в ваши продукты · автор: '+x.author);return f;}
+function shlLibHTML(){const q=nrm(libQ);const arr=shlList().filter(x=>!q||nrm(x.m.name+' '+(x.m.brand||'')+' '+x.author).includes(q)).sort((a,b)=>a.author.localeCompare(b.author,'ru')||a.m.name.localeCompare(b.m.name,'ru'));
+  if(!arr.length)return '<section class="card"><div class="empty">'+(SHL.busy?'Загружаю…':'Близкие пока не добавили своих продуктов и рецептов. Когда добавят — они появятся здесь с именем автора.')+'</div></section>';
+  return '<p class="small muted" style="margin:0 2px">Продукты и рецепты, которые завели близкие. Нажмите — сохраню копию к вам, с указанием автора.</p><section class="card" style="padding:4px 14px"><div class="list">'+arr.map(x=>{const f=x.m;return '<div class="frow" data-shl="'+esc(x.key)+'">'+(f.photo?'<img class="fph" src="'+f.photo+'" alt="">':'<span class="fph">'+(f.kind==='recipe'?'🥘':'👥')+'</span>')+'<div style="min-width:0"><div class="t">'+esc(f.name)+'</div><div class="s">👤 '+esc(x.author)+' · '+r0(f.per.k)+' ккал/100 г'+(f.kind==='recipe'?' · '+(f.ings||[]).length+' ингр.':'')+'</div></div><div class="r muted">+</div></div>';}).join('')+'</div></section>';}
+function shareToggle(f){if(!canShare())return '';if(f.from)return '<p class="small muted" style="margin:0 2px">Автор: <b>'+esc(f.from)+'</b>. Это ваша копия — изменения видны только вам.</p>';
+  return '<label class="card row" style="flex-wrap:nowrap;gap:12px;cursor:pointer;padding:12px 14px"><input type="checkbox" data-fshared '+(f.shared!==false?'checked':'')+' style="width:20px;height:20px;flex:none"><span class="small"><b>Видно близким</b> — появится в их поиске с вашим именем</span></label>';}
+document.addEventListener('click',e=>{const t=e.target;let el;
+  if((el=t.closest('[data-shl]'))){const x=SHL.items[el.dataset.shl];if(!x)return;const f=saveSharedFood(x);if(f.kind==='recipe')editRecipe(f.id);else editFood(f.id);return;}
+  if((el=t.closest('[data-hshare]'))){const p=curP();p.shareHealth=el.dataset.hshare;persist('p',p.id);queueSummary(300);toast(p.shareHealth==='off'?'Здоровье близким не показывается.':'Близкие увидят '+(p.shareHealth==='full'?'подробную':'краткую')+' оценку здоровья.');render();setTimeout(()=>loadFeed(true),3500);return;}
+});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.fshared!==undefined){const o=sheetKind==='frecipe'?FD.recipe:FD.food;if(o)o.shared=t.checked;}});
 
 /* ---------- Настройки, доступ, защита ---------- */
 function diagCard(){if(!(TGA&&SYNC_URL)||SYNC_URL.indexOf('%%')===0)return '';

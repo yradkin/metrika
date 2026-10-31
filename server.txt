@@ -25,7 +25,8 @@
 const MAX_AGE_SEC = 30 * 24 * 3600; // сколько живёт подпись Telegram
 const HISTORY_MAX = 5000;        // сколько прошлых версий хранить
 const BACKUP_KEEP = 40;          // сколько резервных копий хранить
-const SERVER_VERSION = 10; // v10: родные и друзья по приглашению (у каждого своё пространство), личный сервер с резервной копией у владельца, лента прогресса с реакциями
+const SERVER_VERSION = 11; // v11: общая библиотека продуктов и рецептов с авторами; здоровье в ленте близких (по желанию)
+// v10: v10: родные и друзья по приглашению (у каждого своё пространство), личный сервер с резервной копией у владельца, лента прогресса с реакциями
 // v9: v9: быстрый режим Gemini (minimal thinking) для всех распознаваний, несколько блюд на одном фото
 // v8: v8: чтение цифр штрихкода с фото нейросетью (если сканер не справился)
 // v7: v7: своя база продуктов и брендов из Open Food Facts (русскоязычные и белорусские), поиск через search.openfoodfacts.org
@@ -184,7 +185,7 @@ function doGet() {
 function doPost(e) {
   let req;
   try { req = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, err: 'bad_json' }); }
-  if (/^(verify|mirror_push|mirror_pull|mirror_file|hub_feed|hub_react)$/.test(req.op || '')) { try { return out_(hubApi_(req)); } catch (err) { return out_({ ok: false, err: 'server', msg: String(err) }); } }
+  if (/^(verify|mirror_push|mirror_pull|mirror_file|hub_feed|hub_react|hub_lib)$/.test(req.op || '')) { try { return out_(hubApi_(req)); } catch (err) { return out_({ ok: false, err: 'server', msg: String(err) }); } }
   if (req.op === 'link') { try { return out_(link_(req)); } catch (err) { return out_({ ok: false, err: 'server', msg: String(err) }); } }
   const user = auth_(req.initData);
   if (!user) return out_({ ok: false, err: 'auth' });
@@ -220,9 +221,9 @@ function doPost(e) {
     if (!me) return out_({ ok: false, err: 'not_member' });
     CUR = me;
     // лента прогресса: на личном сервере — через основной
-    if (req.op === 'feed' || req.op === 'react') {
-      if (isClone_()) { try { lock.releaseLock(); } catch (e3) {} const P = PropertiesService.getScriptProperties(); const r = hubCall_(P.getProperty('HUB_URL'), Object.assign({}, req, { op: req.op === 'feed' ? 'hub_feed' : 'hub_react', mkey: P.getProperty('HUB_KEY'), initData: '' })); return out_(r || { ok: false, err: 'hub_down' }); }
-      return out_(req.op === 'feed' ? feed_(me) : react_(me, req));
+    if (req.op === 'feed' || req.op === 'react' || req.op === 'lib') {
+      if (isClone_()) { try { lock.releaseLock(); } catch (e3) {} const P = PropertiesService.getScriptProperties(); const r = hubCall_(P.getProperty('HUB_URL'), Object.assign({}, req, { op: 'hub_' + req.op, mkey: P.getProperty('HUB_KEY'), initData: '' })); return out_(r || { ok: false, err: 'hub_down' }); }
+      return out_(req.op === 'feed' ? feed_(me) : req.op === 'lib' ? lib_(me, req) : react_(me, req));
     }
     if (roleOf_(me) === 'viewer' && /^(push|recognize|file_put|file_del|doc_read|food_read)$/.test(req.op)) return out_({ ok: false, err: 'read_only' });
 
@@ -867,6 +868,7 @@ function hubApi_(req) {
     }
     if (req.op === 'hub_feed') return feed_(rec);
     if (req.op === 'hub_react') return react_(rec, req);
+    if (req.op === 'hub_lib') return lib_(rec, req);
     return { ok: false, err: 'bad_op' };
   } finally { try { lock.releaseLock(); } catch (e) {} }
 }
@@ -954,6 +956,20 @@ function feed_(me) {
   const sh = social_(); const n = sh.getLastRow(); const cut = Date.now() - 21 * 864e5;
   const reacts = n > 1 ? sh.getRange(2, 1, n - 1, 6).getValues().filter(r => +r[0] > cut).map(r => ({ at: +r[0], from: +r[1], fromName: String(r[2]), to: +r[3], day: String(r[4]), emoji: String(r[5]) })) : [];
   return { ok: true, people: people, reacts: reacts, now: Date.now() };
+}
+/* общая библиотека: продукты и рецепты всех участников (кроме скрытых автором) */
+function lib_(me, req) {
+  const since = +req.since || 0; const m = members_(); const names = {}; let ownerId = 0;
+  m.list.forEach(x => { names[x.owner ? '' : 't' + x.id] = { id: x.id, name: x.name }; if (x.owner) ownerId = x.id; });
+  const mine = me.owner ? '' : 't' + me.id; const items = [];
+  rows_().forEach(r => {
+    const k = r[0]; const mm = k.match(/^(?:(t\d+)~)?m_([\w-]+)$/); if (!mm) return;
+    const ns = mm[1] || ''; if (ns === mine || !names[ns]) return; if (+r[2] <= since) return;
+    let body = null; try { body = r[1] ? JSON.parse(r[1]).m : null; } catch (e) {}
+    if (!body || body.shared === false || body.from) { items.push({ key: k, del: true, at: +r[2] }); return; }   // скрытые и чужие копии не раздаём
+    items.push({ key: k, at: +r[2], author: names[ns].name, authorId: names[ns].id, m: body });
+  });
+  return { ok: true, items: items, now: Date.now() };
 }
 function react_(me, req) {
   const to = +req.to, day = String(req.day || '').slice(0, 10), emoji = String(req.emoji || '').slice(0, 8);
