@@ -594,7 +594,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='2.7';
+const APP_VER='2.8';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -2303,7 +2303,7 @@ function renderFoodAdd(){const d=foodDate;const inMeal=dayItems(d).filter(i=>i.m
     '<div class="fsrch"><input class="inp" type="search" data-fq placeholder="Поиск продукта или блюда" value="'+esc(FD.q)+'" autocomplete="off" enterkeyhint="search"><button type="button" class="iconbtn" data-fscan aria-label="Сканировать штрихкод">'+SCAN_IC+'</button></div>'+
     '<div class="seg" role="group" id="fsegw"'+(FD.q?' hidden':'')+'>'+[['freq','Частые'],['mine','Мои'],['rec','Рецепты'],['base','База']].map(([k,l])=>'<button type="button" data-fsg="'+k+'" aria-pressed="'+(FD.seg===k)+'">'+l+'</button>').join('')+'</div>'+
     '<div id="fres" class="stack" style="gap:8px">'+addBodyHTML()+'</div>'+
-    '<div class="row" style="gap:8px;justify-content:center"><button type="button" class="btn sm" data-fnew="food">+ Продукт</button>'+(FD.pick?'':'<button type="button" class="btn sm" data-fnew="recipe">+ Рецепт</button>'+(SY.ai?'<label class="btn sm" style="position:relative">📷 Блюдо по фото<input type="file" accept="image/*" data-fdish style="position:absolute;inset:0;opacity:0"></label>':''))+'</div></div>','fadd');}
+    '<div class="row" style="gap:8px;justify-content:center"><button type="button" class="btn sm" data-fnew="food">+ Продукт</button>'+(FD.pick?'':'<button type="button" class="btn sm" data-fnew="recipe">+ Рецепт</button>'+(SY.ai?'<label class="btn sm" style="position:relative">📷 Еда по фото<input type="file" accept="image/*" data-fdish style="position:absolute;inset:0;opacity:0"></label>':''))+'</div></div>','fadd');}
 function refreshAddResults(){const el=$('#fres');if(!el||sheetKind!=='fadd'){renderFoodAdd();return;}el.innerHTML=addBodyHTML();const sg=$('#fsegw');if(sg)sg.hidden=!!FD.q;}
 function topF(title,backAttr,right){return '<div class="sheet-top"><button type="button" class="iconbtn" '+backAttr+' aria-label="Назад">'+ICON.back+'</button><span class="ttl">'+esc(title)+'</span>'+(right||'<span style="width:40px"></span>')+'</div>';}
 function quickAdd(s){const a=lastAmount(s);if(FD.pick){addIng(s,a.g,a.q,a.u);return;}const it=addEntry(foodDate,FD.meal,s,a.g,a.q,a.u);haptic('ok');render();renderFoodAdd();
@@ -2508,11 +2508,20 @@ async function readLabel(file){toast('Читаю этикетку…');try{const
     if(num(x.portion)&&!f.units.some(u=>u.n==='порция'))f.units.push({n:'порция',g:num(x.portion)});if(num(x.pack)&&!f.units.some(u=>u.n==='упаковка'))f.units.push({n:'упаковка',g:num(x.pack)});
     renderFoodForm();toast(num(x.k)!=null?'Готово — проверьте цифры.':'Не нашёл таблицу пищевой ценности на фото.');}
   catch(e){toast(e.code==='bad_op'?'Обновите сервер до v6.':'Не получилось прочитать фото.');}}
-async function readDish(file){openSheet(topF('Блюдо по фото','data-fback="add"')+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div><p class="small muted" style="margin:8px 0 0">Оцениваю, что на тарелке…</p></section></div>','fbusy');
-  try{const data=await shrinkImg(file,1200,.85);const r=await api('food_read',{data,mode:'dish'});const x=r.food||{};if(sheetKind!=='fbusy')return;if(!x.name||num(x.k)==null){toast('Не узнал блюдо — найдите его поиском.');renderFoodAdd();return;}
-    const photo=await squareImg(file,120).catch(()=>'');const s={ref:'',name:String(x.name),brand:'',per:{k:r1(num(x.k)),p:r1(num(x.p)||0),f:r1(num(x.f)||0),c:r1(num(x.c)||0)},units:[],kind:'dish',photo};
-    FD.amount=null;openAmount({src:s});if(num(x.g)){FD.amount.u='г';FD.amount.q=r0(num(x.g));renderAmount();}toast('Оценка примерная — поправьте граммы, если нужно.');}
-  catch(e){toast(e.code==='bad_op'?'Обновите сервер до v6.':'Не получилось оценить фото.');renderFoodAdd();}}
+async function readDish(file){const t0=Date.now();openSheet(topF('Еда по фото','data-fback="add"')+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div><p class="small muted" style="margin:8px 0 0">Смотрю, что на тарелке… <span id="dsec">0</span> с</p><p class="note" style="margin:6px 0 0">Обычно 3–10 секунд.</p></section></div>','fbusy');
+  const tick=setInterval(()=>{const e=$('#dsec');if(e)e.textContent=Math.round((Date.now()-t0)/1000);else clearInterval(tick);},500);
+  try{const data=await shrinkImg(file,1024,.82);const r=await api('food_read',{data,mode:'dish'});clearInterval(tick);if(sheetKind!=='fbusy')return;const x=r.food||{};
+    let items=Array.isArray(x.items)?x.items:(x.name?[x]:[]);items=items.filter(i=>i&&i.name&&num(i.k)!=null).map(i=>({name:String(i.name),g:r0(num(i.g)||100),on:true,per:{k:r1(num(i.k)),p:r1(num(i.p)||0),f:r1(num(i.f)||0),c:r1(num(i.c)||0)}}));
+    if(!items.length){toast('Не узнал еду на фото — найдите поиском.');renderFoodAdd();return;}
+    FD.dish={items,photo:await squareImg(file,160).catch(()=>'')};renderDish();}
+  catch(e){clearInterval(tick);toast(e.code==='bad_op'?'Обновите сервер.':'Не получилось оценить фото'+(e.msg?': '+e.msg.slice(0,60):'')+'.');renderFoodAdd();}}
+function renderDish(){const D=FD.dish;const tot=sumItems(D.items.filter(i=>i.on).map(i=>macroOf(i.per,i.g)));
+  openSheet(topF('Еда по фото','data-fback="add"')+'<div class="stack">'+(D.photo?'<img src="'+D.photo+'" alt="" style="width:96px;height:96px;border-radius:18px;object-fit:cover;align-self:center">':'')+
+   '<p class="small muted" style="margin:0;text-align:center">Оценка примерная — поправьте граммы и уберите лишнее.</p><section class="card" style="padding:4px 14px"><div class="list">'+
+   D.items.map((i,n)=>{const m=macroOf(i.per,i.g);return '<div class="frow" style="cursor:default'+(i.on?'':';opacity:.45')+'"><button type="button" class="fph" data-dson="'+n+'" aria-label="Включить или убрать" style="border:0;cursor:pointer">'+(i.on?'✅':'⬜')+'</button><div style="min-width:0"><div class="t">'+esc(i.name)+'</div><div class="s">'+r0(m.k)+' ккал · Б '+fN(m.p)+' · Ж '+fN(m.f)+' · У '+fN(m.c)+'</div></div><div class="row" style="flex-wrap:nowrap;gap:4px"><input class="inp" data-dsg="'+n+'" inputmode="numeric" value="'+i.g+'" style="width:70px;text-align:center;min-height:38px"><span class="muted small">г</span></div></div>';}).join('')+'</div></section>'+
+   '<div class="abig" id="dstot"><b>'+r0(tot.k)+'</b> ккал <span class="muted">· Б '+r0(tot.p)+' · Ж '+r0(tot.f)+' · У '+r0(tot.c)+'</span></div>'+
+   '<div class="seg" role="group">'+MEALS.map(([m,n])=>'<button type="button" data-fmeal2="'+m+'" aria-pressed="'+(FD.meal===m)+'">'+n+'</button>').join('')+'</div>'+
+   '<button type="button" class="btn primary block big-cta" data-dsave>Добавить в '+MEAL_N[FD.meal].toLowerCase()+'</button></div>','fdish');}
 
 /* ---------- события питания ---------- */
 document.addEventListener('click',e=>{const t=e.target;let el;
@@ -2535,6 +2544,10 @@ document.addEventListener('click',e=>{const t=e.target;let el;
   if((el=t.closest('[data-fchip]'))&&FD.amount){FD.amount.q=+el.dataset.fchip;const i=$('#fqty');if(i)i.value=fN(FD.amount.q).replace(/\s/g,'');updAmount();return;}
   if((el=t.closest('[data-fam]'))&&FD.amount){FD.amount.meal=el.dataset.fam;renderAmount();return;}
   if((el=t.closest('[data-fsave]'))){saveAmount();return;}
+  if((el=t.closest('[data-dson]'))&&FD.dish){const i=FD.dish.items[+el.dataset.dson];i.on=!i.on;renderDish();return;}
+  if((el=t.closest('[data-fmeal2]'))&&FD.dish){FD.meal=el.dataset.fmeal2;renderDish();return;}
+  if((el=t.closest('[data-dsave]'))&&FD.dish){const its=FD.dish.items.filter(i=>i.on&&i.g>0);if(!its.length){toast('Нечего добавить.');return;}let k=0;
+    its.forEach(i=>{const e=addEntry(foodDate,FD.meal,{ref:'',name:i.name,per:i.per},i.g,i.g,'г');k+=e.k;});FD.dish=null;haptic('ok');render();renderFoodAdd();toast('+ '+its.length+' '+plural(its.length,'блюдо','блюда','блюд')+' · '+r0(k)+' ккал');return;}
   if((el=t.closest('[data-fdel]'))&&FD.amount&&FD.amount.entry){const A=FD.amount;const it=delEntry(A.date,A.entry.id);closeSheet();if(it)toast('Удалено: '+it.name,'Вернуть',()=>{if(!st.days[A.date])st.days[A.date]={date:A.date,items:[]};st.days[A.date].items.push(it);persist('f',A.date);render();});return;}
   if((el=t.closest('[data-ffav]'))){const f=st.foods[el.dataset.ffav];if(!f)return;f.fav=!f.fav;persist('m',f.id);if(FD.amount)renderAmount();toast(f.fav?'В избранном — будет наверху в «Частых».':'Убрано из избранного.');return;}
   if((el=t.closest('[data-fedit]'))){const f=st.foods[el.dataset.fedit];if(!f)return;if(f.kind==='recipe')editRecipe(f.id);else editFood(f.id);return;}
@@ -2562,6 +2575,7 @@ let fqT=0;
 document.addEventListener('input',e=>{const t=e.target;
   if(t.dataset.fq!==undefined){FD.q=t.value.trim();clearTimeout(fqT);fqT=setTimeout(refreshAddResults,150);return;}
   if(t.dataset.flibq!==undefined){libQ=t.value;const l=$('#flib');if(l)l.innerHTML=libListHTML();return;}
+  if(t.dataset.dsg!==undefined&&FD.dish){const i=FD.dish.items[+t.dataset.dsg];i.g=r0(num(t.value)||0);const tot=sumItems(FD.dish.items.filter(x=>x.on).map(x=>macroOf(x.per,x.g)));const e=$('#dstot');if(e)e.innerHTML='<b>'+r0(tot.k)+'</b> ккал <span class="muted">· Б '+r0(tot.p)+' · Ж '+r0(tot.f)+' · У '+r0(tot.c)+'</span>';return;}
   if(t.id==='fqty'&&FD.amount){FD.amount.q=t.value.replace(',','.');updAmount();return;}
   if(FD.food&&sheetKind==='ffood'){if(t.dataset.ff){FD.food[t.dataset.ff]=t.value;return;}if(t.dataset.fper){FD.food.per[t.dataset.fper]=t.value;return;}if(t.dataset.fun!==undefined){FD.food.units[+t.dataset.fun].n=t.value;return;}if(t.dataset.fug!==undefined){FD.food.units[+t.dataset.fug].g=t.value;return;}}
   if(FD.recipe&&sheetKind==='frecipe'&&t.dataset.fr){FD.recipe[t.dataset.fr]=t.value;const x=$('#frtot');if(x)x.innerHTML=recTotHTML(recTotals(FD.recipe));return;}
