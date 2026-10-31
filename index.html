@@ -608,7 +608,7 @@ const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLL
 let SRV=SYNC_URL; // сервер, с которым работаем: основной или личный сервер пользователя
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='3.1';
+const APP_VER='3.2';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -856,11 +856,11 @@ async function syncPush(){
   updSync();if(Object.keys(SY.pending).length&&SY.state==='ok'){clearTimeout(SY.pt);SY.pt=setTimeout(syncPush,1500);}}
 async function syncPull(){
   if(!SY.ready||SY.pulling||SY.busy)return;SY.pulling=true;
-  try{const r=await api('pull',{since:SY.since});SY.since=r.now-1000;SY.okAt=Date.now();if(SY.state==='err')SY.state='ok';
+  try{const r=await api('pull',{since:SY.since});SY.since=r.now-1000;lsSet('health-since',SRV+'|'+SY.since);SY.okAt=Date.now();if(SY.state==='err')SY.state='ok';
     const docs=r.docs.filter(d=>!SY.pending[d.key]&&JSON.stringify(d.body)!==JSON.stringify(bodyOf(d.key)));noteMeta(r.docs);
     if(docs.length){docs.forEach(d=>setBody(d.key,d.body));saveLocal();refreshAfterSync();}}
   catch(e){SY.state='err';}finally{SY.pulling=false;}updSync();}
-async function resyncAll(){try{const r=await api('pull',{since:0});const docs={};r.docs.forEach(d=>{if(d.body)docs[d.key]=d.body;});applyDocs(docs,true);noteMeta(r.docs);SY.since=r.now-1000;refreshAfterSync();}catch(e){}}
+async function resyncAll(){try{const r=await api('pull',{since:0});lsSet('health-since','');const docs={};r.docs.forEach(d=>{if(d.body)docs[d.key]=d.body;});applyDocs(docs,true);noteMeta(r.docs);SY.since=r.now-1000;refreshAfterSync();}catch(e){}}
 function refreshAfterSync(){render();if(sheet.hidden)return;const a=document.activeElement;if(a&&sheet.contains(a)&&/INPUT|TEXTAREA|SELECT/.test(a.tagName))return;
   if(sheetKind==='test'&&sheetId){if(!st.tests[sheetId]){closeSheet();return;}const sc=sheet.scrollTop;openTest(sheetId);sheet.scrollTop=sc;}
   else if(sheetKind==='doc'&&sheetId){if(!st.docs[sheetId]){closeSheet();return;}const sc=sheet.scrollTop;openDoc(sheetId);sheet.scrollTop=sc;}
@@ -869,17 +869,20 @@ function setRole(r){SY.role=r||'';SY.ro=SY.ready&&SY.role==='viewer';document.bo
 async function syncConnect(){
   if(!TGA||!SYNC_URL||SYNC_URL.indexOf('%%')===0)return;
   try{
-    const h=await api('hello',SY.inviteCode?{invite:SY.inviteCode}:{});SY.me=h.you;SY.members=h.members||[];SY.owner=!!h.owner;SY.requests=h.requests||[];SY.ai=!!h.ai;
+    const sv=(lsGet('health-since')||'').split('|');const hasLocal=Object.keys(st.profiles).length>0;
+    const since0=hasLocal&&sv[0]===SRV&&+sv[1]&&Date.now()-(+sv[1])<14*864e5?+sv[1]:0;   // с прошлого входа — только изменения
+    const h=await api('hello',Object.assign({since:since0},SY.inviteCode?{invite:SY.inviteCode}:{}));SY.me=h.you;SY.members=h.members||[];SY.owner=!!h.owner;SY.requests=h.requests||[];SY.ai=!!h.ai;
     SY.hub=!!h.hub;SY.personal=!!h.personal;SY.tenant=!!h.tenant;SY.plan=h.plan||'';if(h.mkey)SY.mkey=h.mkey;
     if(!h.member){SY.on=false;SY.ready=false;SY.pendingAccess=!!h.pending;SY.invite=h.invite&&!h.invite.bad?h.invite:null;SY.inviteBad=!!(h.invite&&h.invite.bad);
       SY.state=SY.invite?'invite':(h.blocked||h.private)?'blocked':'pending';lsSet('health-shared','');updSync();render();if(SY.inviteBad&&SY.inviteCode)toast('Код приглашения не подошёл или уже использован.');return;}
     if(SY.tenant&&SY.plan==='own'&&SRV===SYNC_URL){SY.on=false;SY.ready=false;SY.state='ownsetup';updSync();render();return;}
     SY.pendingAccess=false;
-    const pl=await api('pull',{since:0});noteMeta(pl.docs);
-    const keep={};Object.keys(SY.pending).forEach(k=>keep[k]=bodyOf(k));
-    if(pl.docs.some(d=>d.body)){const docs={};pl.docs.forEach(d=>{if(d.body)docs[d.key]=d.body;});applyDocs(docs,true);Object.keys(keep).forEach(k=>setBody(k,keep[k]));saveLocal();}
-    else if(h.owner){pushAllKeys().forEach(k=>{SY.pending[k]=++SY.seq;});savePending();}
-    SY.since=pl.now-1000;SY.on=true;SY.ready=true;SY.state='ok';SY.okAt=Date.now();S.tg=false;mode='shared';lsSet('health-shared','1');setRole(h.role||'editor');
+    const pl=h.pull||await api('pull',{since:since0});noteMeta(pl.docs);
+    if(since0){pl.docs.filter(d=>!SY.pending[d.key]).forEach(d=>setBody(d.key,d.body));saveLocal();}
+    else{const keep={};Object.keys(SY.pending).forEach(k=>keep[k]=bodyOf(k));
+      if(pl.docs.some(d=>d.body)){const docs={};pl.docs.forEach(d=>{if(d.body)docs[d.key]=d.body;});applyDocs(docs,true);Object.keys(keep).forEach(k=>setBody(k,keep[k]));saveLocal();}
+      else if(h.owner){pushAllKeys().forEach(k=>{SY.pending[k]=++SY.seq;});savePending();}}
+    SY.since=pl.now-1000;lsSet('health-since',SRV+'|'+SY.since);SY.on=true;SY.ready=true;SY.state='ok';SY.okAt=Date.now();S.tg=false;mode='shared';lsSet('health-shared','1');setRole(h.role||'editor');
     if(SY.ro){SY.pending={};savePending();}
     render();if(h.joined&&h.owner)toast(PERSONAL?'Приложение привязано к вашему Telegram. Другие его данные не увидят.':'Вы — организатор. Остальные члены семьи смогут присоединиться, а вы подтвердите их в настройках.');
     try{queueSummary(1500);}catch(e){}syncPush();if(SY.owner)loadBlocked();SY.lastErr='';

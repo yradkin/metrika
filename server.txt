@@ -25,7 +25,8 @@
 const MAX_AGE_SEC = 30 * 24 * 3600; // сколько живёт подпись Telegram
 const HISTORY_MAX = 5000;        // сколько прошлых версий хранить
 const BACKUP_KEEP = 40;          // сколько резервных копий хранить
-const SERVER_VERSION = 11; // v11: общая библиотека продуктов и рецептов с авторами; здоровье в ленте близких (по желанию)
+const SERVER_VERSION = 12; // v12: быстрее — чтение без очереди (блокировка только для записи), hello сразу отдаёт изменения с прошлого входа
+// v11: v11: общая библиотека продуктов и рецептов с авторами; здоровье в ленте близких (по желанию)
 // v10: v10: родные и друзья по приглашению (у каждого своё пространство), личный сервер с резервной копией у владельца, лента прогресса с реакциями
 // v9: v9: быстрый режим Gemini (minimal thinking) для всех распознаваний, несколько блюд на одном фото
 // v8: v8: чтение цифр штрихкода с фото нейросетью (если сканер не справился)
@@ -182,6 +183,7 @@ function doGet() {
   return out_({ ok: true, app: 'health-sync', v: SERVER_VERSION });
 }
 
+const WRITE_OPS = /^(push|join|plan|invite_new|invite_del|approve|deny|role|kick|unblock|restore|restore_backup|backup_now|react)$/;
 function doPost(e) {
   let req;
   try { req = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, err: 'bad_json' }); }
@@ -192,7 +194,8 @@ function doPost(e) {
 
   const lock = LockService.getScriptLock();
   try {
-    lock.waitLock(20000);
+    // очередь (блокировка) нужна только тем запросам, что меняют данные; чтение идёт параллельно
+    if (WRITE_OPS.test(req.op || '') || (req.op === 'hello' && !PropertiesService.getScriptProperties().getProperty('MEMBERS'))) lock.waitLock(20000);
     const m = members_();
     let me = m.list.find(x => x.id === user.id);
 
@@ -213,6 +216,7 @@ function doPost(e) {
         if (code) { const inv = invites_().find(x => x.code === code && !x.used); if (inv) invite = { code: inv.code, name: inv.name, from: (m.list.find(x => x.owner) || {}).name || '' }; else invite = { bad: true }; }
       }
       return out_({ ok: true, member: !!me, owner: !!(me && me.owner), role: me ? roleOf_(me) : '', joined: joined, pending: pending, blocked: !me && isBlocked, private: !me && !isBlocked && priv,
+        pull: me && req.since != null ? pull_(+req.since || 0, nsOf_(me)) : undefined,
         tenant: !!(me && me.tenant), plan: me && me.tenant ? me.plan : '', mkey: me && me.tenant ? me.mkey : '', hub: !isClone_(), personal: isClone_(), invite: invite,
         you: { id: user.id, name: user.name }, members: me ? (me.tenant ? [me] : m.list.map(pubMember_)) : [], requests: me && me.owner ? requests_() : [], ai: !!PropertiesService.getScriptProperties().getProperty('GEMINI_KEY'), now: Date.now() });
     }
@@ -852,7 +856,7 @@ function tenantFolder_(rec) {
 /* ---------- основной сервер: запросы от личных серверов (по ключу участника) ---------- */
 function hubApi_(req) {
   if (isClone_()) return { ok: false, err: 'not_hub' };
-  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  const lock = LockService.getScriptLock(); if (/^(mirror_push|mirror_file|hub_react)$/.test(req.op)) lock.waitLock(20000);
   try {
     const m = members_(); const rec = m.list.find(x => x.mkey && x.mkey === String(req.mkey || ''));
     if (!rec) return { ok: false, err: 'bad_key' };
