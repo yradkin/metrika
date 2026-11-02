@@ -492,6 +492,9 @@ body.dragmode{-webkit-user-select:none;user-select:none}
 .hbox{margin-top:10px;padding:10px 12px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line)}
 .hchips{display:flex;flex-wrap:wrap;gap:6px}
 .hchip{display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:4px 9px;border-radius:999px;background:var(--surface);border:1px solid var(--line)}
+/* экономия батареи: фон и кнопки без постоянной анимации */
+.aura i,.hero::before,.btn.primary::before{animation:none!important}
+.aura i{will-change:auto!important}
 /* ===== Питание ===== */
 .iconbtn.me{padding:0;overflow:hidden;border-radius:50%}
 .iconbtn.me .av{width:100%;height:100%;font-size:12px}
@@ -608,7 +611,7 @@ const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLL
 let SRV=SYNC_URL; // сервер, с которым работаем: основной или личный сервер пользователя
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='3.4';
+const APP_VER='3.5';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -2192,7 +2195,89 @@ const FOODBASE_RAW=`Крупы и гарниры
 Вино полусладкое|80|0.2|0|4|бокал:150
 Шампанское брют|70|0.2|0|1.5|бокал:150
 Коньяк|240|0|0|0.1|рюмка:40
-Виски|250|0|0|0|рюмка:40`;
+Виски|250|0|0|0|рюмка:40
+Милкавита и Моя Славита (Гомель)
+Молоко ультрапастеризованное 1,5% (Милкавита)|45|3|1.5|4.8|стакан:200|упаковка:1000
+Молоко ультрапастеризованное 2,5% (Милкавита)|53|3|2.5|4.7|стакан:200|упаковка:1000
+Молоко ультрапастеризованное 3,2% (Милкавита)|60|3|3.2|4.7|стакан:200|упаковка:1000
+Молоко ультрапастеризованное 3,6–4,2% (Милкавита)|63|3|3.6|4.8|стакан:200|упаковка:1000
+Молоко Latte Barista 3,2% (Милкавита)|60|3.2|3.2|4.7|стакан:200|упаковка:1000
+Молоко пастеризованное 1,7% (Моя Славита)|45|2.8|1.7|4.7|стакан:200
+Молоко пастеризованное 2,4% (Моя Славита)|52|2.8|2.4|4.7|стакан:200
+Молоко пастеризованное 3,0% (Моя Славита)|57|2.8|3|4.7|стакан:200
+Кефир 1,5% (Милкавита)|41|2.8|1.5|4|стакан:200
+Кефир 2,5% (Милкавита)|50|2.8|2.5|4|стакан:200
+Кефир 3,2% (Милкавита)|56|2.8|3.2|4|стакан:200
+Кефир 1,5% (Моя Славита)|40|2.8|1.5|3.8|стакан:200
+Кефир 2,5% (Моя Славита)|50|2.8|2.5|3.8|стакан:200
+Кефир 3,2% (Моя Славита)|55|2.8|3.2|3.7|стакан:200
+Ряженка 3,2% (Милкавита, Моя Славита)|56|2.8|3.2|4.1|стакан:200
+Снежок 2,5% (Моя Славита)|79|2.8|2.5|11.4|стакан:200
+Напиток сывороточный Fresh time с соком (Милкавита)|37|0.4|0|8.8|стакан:200
+Сыворотка молочная (Моя Славита)|15|0.5|0|3.2|стакан:200
+Сметана 10% (Милкавита, Моя Славита)|114|2.8|10|3.1|ст.л.:20
+Сметана 15% (Милкавита, Моя Славита)|157|2.6|15|2.9|ст.л.:20
+Сметана 20% (Милкавита, Моя Славита)|202|2.5|20|2.9|ст.л.:20
+Творог 2% (Милкавита, Bopp, Моя Славита)|99|19|2|1.3
+Творог 5% (Милкавита, Bopp)|113|15.5|5|1.5
+Творог 9% (Милкавита, Bopp)|147|15|9|1.5
+Творог мягкий 10% (Моя Славита)|130|8|10|2
+Напиток кисломолочный SKYRPRO 0,1% (Милкавита)|45|6|0.1|5|стакан:200
+Иммунолайн 2% (Милкавита)|50|2.9|2|4.7|стакан:200
+Бифитат 2,5% (Милкавита)|55|2.9|2.5|4.7|стакан:200
+Бифитэль 2% (Милкавита)|65|2.4|2|9.3|стакан:200
+Йогурт Груша-мёд-злаки 2% (Милкавита)|96|3.3|2|16.2
+Йогурт Манго-маракуйя 2% (Милкавита)|97|3.3|2|16.4
+Йогурт Клубника 2% (Милкавита)|98|3.3|2|16.6
+Йогурт Греческий без наполнителя 2% (Милкавита)|67|8|2|4.2
+Йогурт Греческий Злаки 1,7% (Милкавита)|93|7|1.7|12.4
+Йогурт Греческий Манго 1,7% (Милкавита)|87|7|1.7|10.8
+Йогурт Греческий Клубника 1,7% (Милкавита)|90|7|1.7|11.7
+Йогурт Киви-крыжовник 1,5% (Моя Славита)|87|2.9|1.5|15.3
+Йогурт Клубника 1,5% (Моя Славита)|86|2.9|1.5|15.3
+Йогурт Персик 1,5% (Моя Славита)|87|2.9|1.5|15.4
+Йогурт Вишня 1,5% (Моя Славита)|87|2.9|1.5|15.5
+Йогурт Черника 1,5% (Моя Славита)|87|2.9|1.5|15.4
+Йогурт 2,5% (Моя Славита)|100|2.9|2.5|16.2
+Масло сладкосливочное 72,5% (Милкавита)|661|0.8|72.5|1.3|ч.л.:5
+Масло сладкосливочное 82,5% (Милкавита)|748|0.5|82.5|0.8|ч.л.:5
+Масло сладкосливочное 61,5% (Моя Славита)|566|1.3|61.5|1.7|ч.л.:5
+Масло сладкосливочное 73,5% (Моя Славита)|670|0.8|73.5|1.2|ч.л.:5
+Пудинг творожный Ласунак 6% (Моя Славита)|135|5.3|6|15
+Десерт творожный Сказка 7% (Моя Славита)|138|5.6|7|13.2
+Сливки 10% (Милкавита)|120|2.6|10|4.3|ст.л.:15
+Сливки 20% (Милкавита)|210|2.5|20|3.8|ст.л.:15
+Сливки 33% (Милкавита)|320|2.2|33|3.2|ст.л.:15
+Крем сливочный 33% (Милкавита)|320|2.3|33|3.3|ст.л.:15
+Сырок глазированный Бабл гам, Апельсин 26% (Милкавита)|422|7|28.3|34.8
+Сырок глазированный ваниль 26% (Latte Barista)|410|7.1|27.6|33.4
+Сырок глазированный с какао 23% (Latte Barista)|405|7|25.9|35.9
+Сырок глазированный с кокосом 26% (Latte Barista)|443|6.7|31.2|33.8
+Сыр Эдам Lux 45% (Милкавита)|320|23|25|0|ломтик:20
+Сыр Голландский Новый 45% (Милкавита)|320|23|25|0|ломтик:20
+Сыр Гауда Lux 45% (Милкавита)|315|23|25|0|ломтик:20
+Сыр Белорусское золото 45% (Милкавита)|316|23.2|24.8|0|ломтик:20
+Сыр Мраморный 45% (Милкавита)|327|25|25.2|0|ломтик:20
+Сыр Франциск 45% (Милкавита)|370|32|27|0|ломтик:20
+Сыр Пармезан Lux 40% (Милкавита)|313|26|23.2|0|ст.л.:6
+Сыр Пармезан Lux Mild (Милкавита)|320|26|24|0|ст.л.:6
+Сыр Пармезан Lux Delicate (Милкавита)|327|26|24.8|0|ст.л.:6
+Сыр Моцарелла для пиццы 45% (Милкавита)|303|23|23.4|0|ломтик:20
+Сыр тёртый 45% (Милкавита)|325|23.8|25.1|0|ст.л.:7
+Сыр Грювер Особый 45% (Милкавита)|339|27|25.7|0|ломтик:20
+Сыр Реджини 40% (Милкавита)|290|24|22|0|ломтик:20
+Сыр Fragrante 45% (Милкавита)|311|23|24.3|0|ломтик:20
+Сыр Сливочный 50% (Милкавита)|350|24.5|28|0|ломтик:20
+Сыр Российский ранний 45% (Милкавита)|323|25|24.8|0|ломтик:20
+Сыр Odertall 45% (Милкавита)|323|23|25.7|0|ломтик:20
+Сыр Белорусский классический 45% (Милкавита)|320|23|25|0|ломтик:20
+Сыр плавленый Васаби 40% (Gustare)|179|12|13.2|3.1
+Сыр плавленый с беконом 40% (Gustare)|176|12.3|12.8|2.8
+Сыр плавленый с белыми грибами 40% (Gustare)|160|6.8|13.9|2.1
+Сыр плавленый Сливочный 40% (Gustare)|160|6.9|14|2.1
+Сыр плавленый с белыми грибами 45% (Моя Славита)|224|14|18.1|1.3
+Сыр плавленый Янтарь 45% (Моя Славита)|210|11.6|17.9|0.6
+Сыр плавленый Сливочный 45% (Моя Славита)|230|15.7|18|1.2`;
 const FOODBASE=(()=>{const out=[];let cat='';FOODBASE_RAW.split('\n').forEach(l=>{if(!l.includes('|')){cat=l.trim();return;}const a=l.split('|');
   out.push({id:'b'+out.length,kind:'base',cat,name:a[0],per:{k:+a[1],p:+a[2],f:+a[3],c:+a[4]},units:a.slice(5).map(u=>{const[x,g]=u.split(':');return {n:x,g:+g};})});});return out;})();
 /* ---------- Питание: дневник, продукты, рецепты, штрихкоды, отчёты ---------- */
@@ -2221,11 +2306,13 @@ async function fdbRefresh(force){if(FDB.busy||!SY.ready)return;const last=+lsGet
   catch(e){FDB.err=e.code==='bad_op'?'old':'fail';}finally{FDB.busy=false;}if(sheetKind==='fadd')refreshAddResults();}
 function fdbSrc(i){const r=FDB.rows[i];const units=[];if(r[7])units.push({n:'порция',g:r[7]});if(r[8]&&r[8]!==r[7])units.push({n:'упаковка',g:r[8]});
   const o={name:r[1],brand:r[2],code:/^(00)?9999/.test(r[0])?'':r[0],per:{k:r[3],p:r[4],f:r[5],c:r[6]},units};return {ref:'',name:r[1],brand:r[2],per:o.per,units,kind:'off',off:o,by:/^481/.test(r[0])};}
-function fdbSearch(q,words,lim){if(!FDB.rows)return [];const out=[];const n=FDB.n;for(let i=0;i<n.length;i++){const x=n[i];let ok=true;for(const w of words){if(!x.includes(w)){ok=false;break;}}if(ok)out.push(i);}
+const BRAND_AL={харрис:'harrys',хэррис:'harrys',савушкин:'savushkin',милкавита:'milkavita',данон:'danone',активиа:'activia',простоквашино:'prostokvashino'};
+function fdbSearch(q,words,lim){if(!FDB.rows)return [];const al=words.map(w=>{const k=Object.keys(BRAND_AL).find(b=>b.startsWith(w)&&w.length>=4);return k?BRAND_AL[k]:null;});if(al.some(Boolean)){const alt=words.map((w,i)=>al[i]||w);const r1=fdbSearch0(q,words,lim);const r2=fdbSearch0(alt.join(' '),alt,lim);return r1.concat(r2.filter(x=>!r1.some(y=>y.name===x.name&&y.brand===x.brand))).slice(0,lim);}return fdbSearch0(q,words,lim);}
+function fdbSearch0(q,words,lim){const out=[];const n=FDB.n;for(let i=0;i<n.length;i++){const x=n[i];let ok=true;for(const w of words){if(!x.includes(w)){ok=false;break;}}if(ok)out.push(i);}
   const sc=i=>{const x=n[i];return (x.startsWith(q)?0:x.startsWith(words[0])?1:(' '+x).includes(' '+words[0])?2:3)*1000-(/^481/.test(FDB.rows[i][0])?500:0)+x.length;};
   return out.sort((a,b)=>sc(a)-sc(b)).slice(0,lim).map(fdbSrc);}
 const stemW=w=>w.length>=7?w.slice(0,-2):w.length>=5?w.slice(0,-1):w;
-const nrm=s=>String(s||'').toLowerCase().replace(/ё/g,'е').replace(/[«»"(),.]/g,' ').replace(/\s+/g,' ').trim();
+const nrm=s=>String(s||'').toLowerCase().replace(/ё/g,'е').replace(/['’`]/g,'').replace(/[«»"(),.]/g,' ').replace(/\s+/g,' ').trim();
 function dayItems(d){const x=st.days[d];return x&&Array.isArray(x.items)?x.items:[];}
 function sumItems(a){const s={k:0,p:0,f:0,c:0};a.forEach(i=>{s.k+=+i.k||0;s.p+=+i.p||0;s.f+=+i.f||0;s.c+=+i.c||0;});return s;}
 function macroOf(per,g){const k=(+g||0)/100;return {k:r1(per.k*k),p:r1(per.p*k),f:r1(per.f*k),c:r1(per.c*k)};}
@@ -2297,7 +2384,7 @@ function foodHomeCard(p){const G=foodGoal(p);const d=ymd(today());const S=sumIte
 
 /* ---------- добавление: поиск, частые, мои, рецепты, база ---------- */
 function openFoodAdd(meal,keep){fdbLoad();try{shlLoad();}catch(e){}if(meal)FD.meal=meal;if(!keep){FD.q='';FD.off=null;FD.offQ='';}FD.pick=FD.pick||false;renderFoodAdd();}
-const CAT_EM={'Крупы и гарниры':'🍚','Хлеб и выпечка':'🍞','Молочные продукты и яйца':'🥛','Мясо и птица':'🍗','Рыба и морепродукты':'🐟','Овощи':'🥦','Фрукты и ягоды':'🍎','Орехи, семена, масла':'🥜','Сладкое и перекусы':'🍫','Супы':'🍜','Готовые блюда':'🍝','Напитки':'☕','Блюда из птицы':'🍗','Блюда из мяса':'🥩','Рыбные блюда':'🐟','Белорусская кухня':'🥔','Завтраки':'🍳','Салаты и закуски':'🥗','Гарниры':'🍚','Паста, пицца, Азия, фастфуд':'🍕','Выпечка и десерты':'🍰','Молочные продукты (ещё)':'🧀','Овощи, фрукты, орехи (ещё)':'🥕','Соусы':'🥫','Напитки (ещё)':'🥤'};
+const CAT_EM={'Крупы и гарниры':'🍚','Хлеб и выпечка':'🍞','Молочные продукты и яйца':'🥛','Мясо и птица':'🍗','Рыба и морепродукты':'🐟','Овощи':'🥦','Фрукты и ягоды':'🍎','Орехи, семена, масла':'🥜','Сладкое и перекусы':'🍫','Супы':'🍜','Готовые блюда':'🍝','Напитки':'☕','Блюда из птицы':'🍗','Блюда из мяса':'🥩','Рыбные блюда':'🐟','Белорусская кухня':'🥔','Завтраки':'🍳','Салаты и закуски':'🥗','Гарниры':'🍚','Паста, пицца, Азия, фастфуд':'🍕','Выпечка и десерты':'🍰','Молочные продукты (ещё)':'🧀','Овощи, фрукты, орехи (ещё)':'🥕','Соусы':'🥫','Напитки (ещё)':'🥤','Милкавита и Моя Славита (Гомель)':'🥛'};
 const srcEmoji=s=>s.shl?(s.shl.m.kind==='recipe'?'🥘':'👥'):s.kind==='recipe'?'🥘':s.kind==='off'?'🌍':s.kind==='base'?(CAT_EM[s.cat]||'🍽'):s.kind==='food'?'🥫':'🕘';
 function srcRow(s,extra,i){const a=extra&&extra.amt;const kc=a?r0(s.per.k*a.g/100):r0(s.per.k);
   return '<div class="frow" data-fsrc="'+i+'">'+(s.photo?'<img class="fph" src="'+s.photo+'" alt="">':'<span class="fph">'+srcEmoji(s)+'</span>')+'<div style="min-width:0"><div class="t">'+esc(s.name)+(s.fav?' <span style="color:#e2a400">★</span>':'')+'</div><div class="s">'+(s.author?'👤 '+esc(s.author)+' · ':s.from?'от '+esc(s.from)+' · ':'')+(s.by?'🇧🇾 ':'')+(s.brand?esc(s.brand)+' · ':'')+(a?(a.u&&a.u!=='г'?fN(a.q)+' '+esc(a.u):fN(a.g)+' г')+' · '+kc+' ккал':'100 г · '+kc+' ккал')+(extra&&extra.n?' · '+extra.n+'×':'')+'</div></div><button type="button" class="fplus sm" data-fquick="'+i+'" aria-label="Добавить сразу">'+ICON.plus+'</button></div>';}
@@ -2505,10 +2592,12 @@ async function decodeByAI(file){if(!SY.ready||!SY.ai)return null;try{const data=
 async function lookupBarcode(code){code=String(code||'').replace(/\D/g,'');if(code.length<6){toast('Не похоже на штрихкод.');return;}
   await fdbLoad();const mine=myFoods().find(f=>f.code===code);if(mine){if(FD.libMode){editFood(mine.id);return;}openAmount({src:srcOf(mine)});return;}
   if(FDB.rows&&FDB.byCode[code]!=null){const f=saveOffFood(fdbSrc(FDB.byCode[code]).off);if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}
+  try{const sx=shlList().find(x=>x.m&&x.m.code===code);if(sx){const f=saveSharedFood(sx);if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}}catch(e){}
   openSheet(topF('Штрихкод '+code,'data-close')+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div><p class="small muted" style="margin:8px 0 0">Ищу в Open Food Facts…</p></section></div>','fbusy');
   const r=await offGet(code);if(sheetKind!=='fbusy')return;
+  if(r&&r.name&&!r.per){editFood(null,{code,name:r.name,brand:r.brand},FD.libMode?null:'add');toast('Нашёл название, но без калорийности. Сфотографируйте этикетку — заполню КБЖУ.');return;}
   if(r&&r.name){const f=saveOffFood(r);toast('Нашёл: '+f.name+'. Сохранил в «Мои продукты».');if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}
-  editFood(null,{code},FD.libMode?null:'add');toast(r===null?'Нет связи с базой продуктов — заполните вручную, продукт сохранится.':'Этого штрихкода нет в базе. Сфотографируйте этикетку или введите КБЖУ — дальше продукт найдётся сразу.');}
+  editFood(null,{code},FD.libMode?null:'add');toast(r===null?'Нет связи с базой продуктов — заполните вручную, продукт сохранится.':'Этого штрихкода пока нет в базах. Сфотографируйте этикетку — заполню КБЖУ. Продукт сохранится и найдётся по штрихкоду у вас и у друзей.');}
 
 /* ---------- Open Food Facts: прямо из приложения, при ошибке — через сервер ---------- */
 const OFF_F='code,product_name,product_name_ru,generic_name,brands,nutriments,serving_quantity,quantity';
@@ -2517,9 +2606,11 @@ function offMap(p){if(!p)return null;const n=p.nutriments||{};let k=num(n['energ
   if(k==null&&!per.p&&!per.f&&!per.c)return null;if(k==null)per.k=r1(per.p*4+per.f*9+per.c*4);
   const units=[];const sq=num(p.serving_quantity);if(sq&&sq>0&&sq<2000)units.push({n:'порция',g:r1(sq)});const qq=String(p.quantity||'').match(/(\d+(?:[.,]\d+)?)\s*(kg|кг|g|г|гр|l|л|ml|мл)(?![a-zа-яё])/i);if(qq){const v=num(qq[1])*(/^(kg|кг|l|л)$/i.test(qq[2])?1000:1);if(v&&v<5000&&!units.some(u=>u.g===v))units.push({n:'упаковка',g:v});}
   return {name:String(p.product_name_ru||p.product_name||p.generic_name||'').trim(),brand:String(p.brands||'').split(',')[0].trim(),code:String(p.code||''),per,units};}
+/* в базе есть товар, но без КБЖУ — хотя бы название и марка, чтобы не вводить вручную */
+function offOrName(p){const m=offMap(p);if(m)return m;const nm=String(p.product_name_ru||p.product_name||p.generic_name||'').trim();return nm?{name:nm,brand:String(p.brands||'').split(',')[0].trim(),code:String(p.code||''),per:null}:false;}
 async function offGet(code){
-  try{const r=await fetch('https://world.openfoodfacts.org/api/v2/product/'+code+'.json?fields='+OFF_F);if(r.status===404)return false;if(r.ok){const j=await r.json();return j&&j.status===1&&j.product?(offMap(Object.assign({code},j.product))||false):false;}}catch(e){}
-  if(SY.ready){try{const r=await api('off',{code});return r.product?(offMap(r.product)||false):false;}catch(e){}}
+  try{const r=await fetch('https://world.openfoodfacts.org/api/v2/product/'+code+'.json?fields='+OFF_F);if(r.status===404)return false;if(r.ok){const j=await r.json();return j&&j.status===1&&j.product?offOrName(Object.assign({code},j.product)):false;}}catch(e){}
+  if(SY.ready){try{const r=await api('off',{code});return r.product?offOrName(r.product):false;}catch(e){}}
   return null;}
 async function offSearch(q){
   if(SY.ready){try{const r=await api('off',{q});return (r.products||[]).map(offMap).filter(x=>x&&x.name);}catch(e){}}
