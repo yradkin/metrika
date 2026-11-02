@@ -607,11 +607,11 @@ const TGA=(window.Telegram&&window.Telegram.WebApp&&window.Telegram.WebApp.initD
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
+const SYNC_URL='%%SYNC_URL%%';
 let SRV=SYNC_URL; // сервер, с которым работаем: основной или личный сервер пользователя
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='3.6';
+const APP_VER='3.7';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -2277,7 +2277,9 @@ const FOODBASE_RAW=`Крупы и гарниры
 Сыр плавленый Сливочный 40% (Gustare)|160|6.9|14|2.1
 Сыр плавленый с белыми грибами 45% (Моя Славита)|224|14|18.1|1.3
 Сыр плавленый Янтарь 45% (Моя Славита)|210|11.6|17.9|0.6
-Сыр плавленый Сливочный 45% (Моя Славита)|230|15.7|18|1.2`;
+Сыр плавленый Сливочный 45% (Моя Славита)|230|15.7|18|1.2
+Рестораны Гомеля
+Капустный салат «Батьки»|69|1.29|2.61|12.41|порция:100`;
 const FOODBASE=(()=>{const out=[];let cat='';FOODBASE_RAW.split('\n').forEach(l=>{if(!l.includes('|')){cat=l.trim();return;}const a=l.split('|');
   out.push({id:'b'+out.length,kind:'base',cat,name:a[0],per:{k:+a[1],p:+a[2],f:+a[3],c:+a[4]},units:a.slice(5).map(u=>{const[x,g]=u.split(':');return {n:x,g:+g};})});});return out;})();
 /* ---------- Питание: дневник, продукты, рецепты, штрихкоды, отчёты ---------- */
@@ -2403,7 +2405,7 @@ function foodHomeCard(p){const G=foodGoal(p);const d=ymd(today());const S=sumIte
 
 /* ---------- добавление: поиск, частые, мои, рецепты, база ---------- */
 function openFoodAdd(meal,keep){fdbLoad();sdbLoad();try{shlLoad();}catch(e){}if(meal)FD.meal=meal;if(!keep){FD.q='';FD.off=null;FD.offQ='';}FD.pick=FD.pick||false;renderFoodAdd();}
-const CAT_EM={'Крупы и гарниры':'🍚','Хлеб и выпечка':'🍞','Молочные продукты и яйца':'🥛','Мясо и птица':'🍗','Рыба и морепродукты':'🐟','Овощи':'🥦','Фрукты и ягоды':'🍎','Орехи, семена, масла':'🥜','Сладкое и перекусы':'🍫','Супы':'🍜','Готовые блюда':'🍝','Напитки':'☕','Блюда из птицы':'🍗','Блюда из мяса':'🥩','Рыбные блюда':'🐟','Белорусская кухня':'🥔','Завтраки':'🍳','Салаты и закуски':'🥗','Гарниры':'🍚','Паста, пицца, Азия, фастфуд':'🍕','Выпечка и десерты':'🍰','Молочные продукты (ещё)':'🧀','Овощи, фрукты, орехи (ещё)':'🥕','Соусы':'🥫','Напитки (ещё)':'🥤','Милкавита и Моя Славита (Гомель)':'🥛'};
+const CAT_EM={'Крупы и гарниры':'🍚','Хлеб и выпечка':'🍞','Молочные продукты и яйца':'🥛','Мясо и птица':'🍗','Рыба и морепродукты':'🐟','Овощи':'🥦','Фрукты и ягоды':'🍎','Орехи, семена, масла':'🥜','Сладкое и перекусы':'🍫','Супы':'🍜','Готовые блюда':'🍝','Напитки':'☕','Блюда из птицы':'🍗','Блюда из мяса':'🥩','Рыбные блюда':'🐟','Белорусская кухня':'🥔','Завтраки':'🍳','Салаты и закуски':'🥗','Гарниры':'🍚','Паста, пицца, Азия, фастфуд':'🍕','Выпечка и десерты':'🍰','Молочные продукты (ещё)':'🧀','Овощи, фрукты, орехи (ещё)':'🥕','Соусы':'🥫','Напитки (ещё)':'🥤','Милкавита и Моя Славита (Гомель)':'🥛','Рестораны Гомеля':'🍽'};
 const srcEmoji=s=>s.store?(s.own?'🧑‍🍳':'🛒'):s.shl?(s.shl.m.kind==='recipe'?'🥘':'👥'):s.kind==='recipe'?'🥘':s.kind==='off'?'🌍':s.kind==='base'?(CAT_EM[s.cat]||'🍽'):s.kind==='food'?'🥫':'🕘';
 function srcRow(s,extra,i){const a=extra&&extra.amt;const kc=a?r0(s.per.k*a.g/100):r0(s.per.k);
   return '<div class="frow" data-fsrc="'+i+'">'+(s.photo?'<img class="fph" src="'+s.photo+'" alt="">':'<span class="fph">'+srcEmoji(s)+'</span>')+'<div style="min-width:0"><div class="t">'+esc(s.name)+(s.fav?' <span style="color:#e2a400">★</span>':'')+'</div><div class="s">'+(s.author?'👤 '+esc(s.author)+' · ':s.from?'от '+esc(s.from)+' · ':'')+(s.by?'🇧🇾 ':'')+(s.store?esc(s.store)+(s.own?' (своё пр-во)':'')+' · ':'')+(s.brand&&!(s.store&&s.own)?esc(s.brand)+' · ':'')+(a?(a.u&&a.u!=='г'?fN(a.q)+' '+esc(a.u):fN(a.g)+' г')+' · '+kc+' ккал':'100 г · '+kc+' ккал')+(extra&&extra.n?' · '+extra.n+'×':'')+'</div></div><button type="button" class="fplus sm" data-fquick="'+i+'" aria-label="Добавить сразу">'+ICON.plus+'</button></div>';}
