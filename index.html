@@ -607,11 +607,11 @@ const TGA=(window.Telegram&&window.Telegram.WebApp&&window.Telegram.WebApp.initD
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-const SYNC_URL='%%SYNC_URL%%';
+const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 let SRV=SYNC_URL; // сервер, с которым работаем: основной или личный сервер пользователя
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='3.8';
+const APP_VER='3.9';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -2432,18 +2432,27 @@ function addBodyHTML(){const L=addLists();FD.list=[];
   if(FD.q)body+=FD.offBusy?'<section class="card" style="text-align:center"><div class="spin"></div><div class="small muted">Ищу в Open Food Facts…</div></section>':(FD.offQ===FD.q&&FD.off&&!FD.off.length?'<p class="note" style="text-align:center">В Open Food Facts тоже не нашлось.</p>':FD.offQ!==FD.q?'<button type="button" class="btn block" data-foff>🌍 Искать «'+esc(FD.q)+'» в Open Food Facts</button>':'');
   return body;}
 function renderFoodAdd(){const d=foodDate;const inMeal=dayItems(d).filter(i=>i.meal===FD.meal);const s=sumItems(inMeal);
-  const head=FD.pick?'<div class="small muted" style="margin:-4px 2px 0">Выберите ингредиент для рецепта «'+esc((FD.recipe&&FD.recipe.name)||'новый')+'»</div>':
+  const head=FD.bind?'<div class="small muted" style="margin:-4px 2px 0">Найдите этот продукт по названию и выберите его — штрихкод <b>'+esc(FD.bind.code)+'</b> запомнится.</div>':FD.pick?'<div class="small muted" style="margin:-4px 2px 0">Выберите ингредиент для рецепта «'+esc((FD.recipe&&FD.recipe.name)||'новый')+'»</div>':
     '<div class="seg" role="group">'+MEALS.map(([m,n])=>'<button type="button" data-fmeal="'+m+'" aria-pressed="'+(FD.meal===m)+'">'+n+'</button>').join('')+'</div>'+(inMeal.length?'<div class="fsum"><span>'+MEAL_N[FD.meal]+': '+inMeal.length+' · <b>'+r0(s.k)+' ккал</b></span><button type="button" class="btn sm primary" data-close>Готово</button></div>':'');
-  openSheet(topF(FD.pick?'Ингредиент':MEAL_N[FD.meal]+' · '+fmtDs(d),FD.pick?'data-fback="recipe"':'data-close')+'<div class="stack">'+head+
+  openSheet(topF(FD.bind?'Привязать штрихкод':FD.pick?'Ингредиент':MEAL_N[FD.meal]+' · '+fmtDs(d),FD.bind?'data-fbindx':FD.pick?'data-fback="recipe"':'data-close')+'<div class="stack">'+head+
     '<div class="fsrch"><input class="inp" type="search" data-fq placeholder="Поиск продукта или блюда" value="'+esc(FD.q)+'" autocomplete="off" enterkeyhint="search"><button type="button" class="iconbtn" data-fscan aria-label="Сканировать штрихкод">'+SCAN_IC+'</button></div>'+
     '<div class="seg" role="group" id="fsegw"'+(FD.q?' hidden':'')+'>'+[['freq','Частые'],['mine','Мои'],['rec','Рецепты'],['base','База'],['shop','Магазины и кафе']].concat(shlList().length?[['shl','Друзей']]:[]).map(([k,l])=>'<button type="button" data-fsg="'+k+'" aria-pressed="'+(FD.seg===k)+'">'+l+'</button>').join('')+'</div>'+
     '<div id="fres" class="stack" style="gap:8px">'+addBodyHTML()+'</div>'+
     '<div class="row" style="gap:8px;justify-content:center"><button type="button" class="btn sm" data-fnew="food">+ Продукт</button>'+(FD.pick?'':'<button type="button" class="btn sm" data-fnew="recipe">+ Рецепт</button>'+(SY.ai?'<label class="btn sm" style="position:relative">📷 Еда по фото<input type="file" accept="image/*" data-fdish style="position:absolute;inset:0;opacity:0"></label>':''))+'</div></div>','fadd');}
 function refreshAddResults(){if(sheetKind!=='fadd'||sheet.hidden)return;const el=$('#fres');if(!el){renderFoodAdd();return;}el.innerHTML=addBodyHTML();const sg=$('#fsegw');if(sg)sg.hidden=!!FD.q;}
 function topF(title,backAttr,right){return '<div class="sheet-top"><button type="button" class="iconbtn" '+backAttr+' aria-label="Назад">'+ICON.back+'</button><span class="ttl">'+esc(title)+'</span>'+(right||'<span style="width:40px"></span>')+'</div>';}
-function quickAdd(s){const a=lastAmount(s);if(FD.pick){addIng(s,a.g,a.q,a.u);return;}const it=addEntry(foodDate,FD.meal,s,a.g,a.q,a.u);haptic('ok');render();renderFoodAdd();
+function quickAdd(s){if(FD.bind){bindPick(s);return;}const a=lastAmount(s);if(FD.pick){addIng(s,a.g,a.q,a.u);return;}const it=addEntry(foodDate,FD.meal,s,a.g,a.q,a.u);haptic('ok');render();renderFoodAdd();
   toast('+ '+s.name+' · '+r0(it.k)+' ккал','Отменить',()=>{delEntry(foodDate,it.id);render();if(sheetKind==='fadd')renderFoodAdd();});}
-async function pickSrc(s){if(s.shl){const f=saveSharedFood(s.shl);s=srcOf(f);}else if(s.off){const f=saveOffFood(s.off);s=srcOf(f);}openAmount({src:s});}
+async function pickSrc(s){if(FD.bind){bindPick(s);return;}if(s.shl){const f=saveSharedFood(s.shl);s=srcOf(f);}else if(s.off){const f=saveOffFood(s.off);s=srcOf(f);}openAmount({src:s});}
+const hasCode=(f,code)=>!!code&&(f.code===code||(Array.isArray(f.codes)&&f.codes.includes(code)));
+/* штрихкод не нашёлся — привязываем его к продукту, найденному по названию */
+function bindStart(){const f=FD.food||{};FD.bind={code:String(f.code||'').replace(/\D/g,''),ret:FD.foodRet,lib:!!FD.libMode};FD.q=String(f.name||'').trim();FD.off=null;FD.offQ='';FD.pick=false;FD.seg='freq';renderFoodAdd();}
+function bindPick(s){const B=FD.bind;FD.bind=null;let f=null;
+  if(s.shl)f=saveSharedFood(s.shl);else if(s.off)f=saveOffFood(s.off);else if(s.ref&&st.foods[s.ref])f=st.foods[s.ref];
+  else{f={id:uid(),kind:'food',name:s.name,brand:s.brand||'',code:'',per:Object.assign({},s.per),units:JSON.parse(JSON.stringify(s.units||[])),src:s.kind==='base'?'base':'own',created:Date.now()};st.foods[f.id]=f;}
+  if(!hasCode(f,B.code)){if(!f.code)f.code=B.code;else{f.codes=Array.isArray(f.codes)?f.codes:[];f.codes.push(B.code);}}
+  persist('m',f.id);haptic('ok');toast('Штрихкод '+B.code+' запомнил для «'+f.name+'». В следующий раз найдётся сразу.');
+  if(B.lib){editFood(f.id);return;}openAmount({src:srcOf(f)});}
 function saveOffFood(o){const ex=(o.code&&myFoods().find(f=>f.code===o.code))||myFoods().find(f=>f.src==='off'&&f.name===o.name&&(f.brand||'')===(o.brand||''));if(ex)return ex;const f={id:uid(),kind:'food',name:o.name||('Продукт '+o.code),brand:o.brand||'',code:o.code||'',per:o.per,units:o.units||[],src:'off',created:Date.now()};st.foods[f.id]=f;persist('m',f.id);return f;}
 
 /* ---------- количество ---------- */
@@ -2483,6 +2492,7 @@ function editFood(id,pre,ret){const f=id&&st.foods[id]?JSON.parse(JSON.stringify
   if(f.kind==='recipe'){editRecipe(id);return;}FD.food=f;FD.foodRet=ret||null;renderFoodForm();}
 function renderFoodForm(){const f=FD.food;const isNew=!st.foods[f.id];const pv=k=>f.per[k]===''||f.per[k]==null?'':f.per[k];
   openSheet(topF(isNew?'Новый продукт':'Продукт',FD.foodRet==='add'?'data-fback="add"':'data-close',isNew?'':'<button type="button" class="iconbtn" data-fdelfood aria-label="Удалить продукт">'+ICON.del+'</button>')+'<div class="stack">'+
+   (isNew&&f.code&&!f.per.k?'<button type="button" class="btn primary block" data-fbind>🔎 Найти по названию и привязать штрихкод</button>':'')+
    (SY.ai?'<label class="btn block" style="position:relative">📷 Заполнить по фото этикетки<input type="file" accept="image/*" data-flabel style="position:absolute;inset:0;opacity:0"></label>':'')+
    '<section class="card"><div class="stack" style="gap:12px"><div class="row" style="flex-wrap:nowrap;gap:12px;align-items:flex-end"><label class="fph lg pick" style="position:relative">'+(f.photo?'<img src="'+f.photo+'" alt="">':'📷')+'<input type="file" accept="image/*" data-fphoto style="position:absolute;inset:0;opacity:0"></label><div class="fld" style="flex:1"><label>Название</label><input data-ff="name" value="'+esc(f.name)+'" placeholder="Например, Кефир 2,5%"></div></div>'+
    '<div class="row" style="gap:10px;flex-wrap:nowrap"><div class="fld"><label>Марка</label><input data-ff="brand" value="'+esc(f.brand||'')+'" placeholder="Савушкин"></div><div class="fld"><label>Штрихкод</label><input data-ff="code" inputmode="numeric" value="'+esc(f.code||'')+'" placeholder="481…"></div></div></div></section>'+
@@ -2613,15 +2623,15 @@ async function decodeImage(file){const det=await nativeDetector();
 /* штрихкод не прочитался — просим нейросеть прочитать цифры под ним */
 async function decodeByAI(file){if(!SY.ready||!SY.ai)return null;try{const data=await shrinkImg(file,1600,.9);const r=await api('food_read',{data,mode:'barcode'});const c=String((r.food||{}).code||'').replace(/\D/g,'');return c.length>=8?c:null;}catch(e){return null;}}
 async function lookupBarcode(code){code=String(code||'').replace(/\D/g,'');if(code.length<6){toast('Не похоже на штрихкод.');return;}
-  await fdbLoad();const mine=myFoods().find(f=>f.code===code);if(mine){if(FD.libMode){editFood(mine.id);return;}openAmount({src:srcOf(mine)});return;}
+  await fdbLoad();const mine=myFoods().find(f=>hasCode(f,code));if(mine){if(FD.libMode){editFood(mine.id);return;}openAmount({src:srcOf(mine)});return;}
   try{await sdbLoad();}catch(e){}if(SDB.rows&&SDB.byCode[code]!=null){const f=saveOffFood(sdbSrc(SDB.byCode[code]).off);if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}
   if(FDB.rows&&FDB.byCode[code]!=null){const f=saveOffFood(fdbSrc(FDB.byCode[code]).off);if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}
-  try{const sx=shlList().find(x=>x.m&&x.m.code===code);if(sx){const f=saveSharedFood(sx);if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}}catch(e){}
+  try{const sx=shlList().find(x=>x.m&&hasCode(x.m,code));if(sx){const f=saveSharedFood(sx);if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}}catch(e){}
   openSheet(topF('Штрихкод '+code,'data-close')+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div><p class="small muted" style="margin:8px 0 0">Ищу в Open Food Facts…</p></section></div>','fbusy');
   const r=await offGet(code);if(sheetKind!=='fbusy')return;
   if(r&&r.name&&!r.per){editFood(null,{code,name:r.name,brand:r.brand},FD.libMode?null:'add');toast('Нашёл название, но без калорийности. Сфотографируйте этикетку — заполню КБЖУ.');return;}
   if(r&&r.name){const f=saveOffFood(r);toast('Нашёл: '+f.name+'. Сохранил в «Мои продукты».');if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}
-  editFood(null,{code},FD.libMode?null:'add');toast(r===null?'Нет связи с базой продуктов — заполните вручную, продукт сохранится.':'Этого штрихкода пока нет в базах. Сфотографируйте этикетку — заполню КБЖУ. Продукт сохранится и найдётся по штрихкоду у вас и у друзей.');}
+  editFood(null,{code},FD.libMode?null:'add');toast(r===null?'Нет связи с базой продуктов — найдите продукт по названию или заполните вручную.':'Штрихкода нет в базах. Найдите продукт по названию — штрихкод запомнится — или сфотографируйте этикетку.');}
 
 /* ---------- Open Food Facts: прямо из приложения, при ошибке — через сервер ---------- */
 const OFF_F='code,product_name,product_name_ru,generic_name,brands,nutriments,serving_quantity,quantity';
@@ -2669,7 +2679,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
   if((el=t.closest('[data-ftab]'))){tab='food';foodSeg='diary';foodDate=ymd(today());render();window.scrollTo(0,0);return;}
   if((el=t.closest('[data-fday]'))){foodDate=el.dataset.fday;render();return;}
   if((el=t.closest('[data-fcol]'))&&!t.closest('[data-fadd]')){const m=el.dataset.fcol;FD.collapsed[m]=!FD.collapsed[m];render();return;}
-  if((el=t.closest('[data-fadd]'))){if(el.dataset.fhome){foodDate=ymd(today());}FD.pick=false;FD.ret=null;FD.seg='freq';openFoodAdd(el.dataset.fadd);return;}
+  if((el=t.closest('[data-fadd]'))){if(el.dataset.fhome){foodDate=ymd(today());}FD.pick=false;FD.bind=null;FD.ret=null;FD.seg='freq';openFoodAdd(el.dataset.fadd);return;}
   if((el=t.closest('[data-fcopy]'))){const m=el.dataset.fcopy;const y=addDays(foodDate,-1);const its=dayItems(y).filter(i=>i.meal===m);if(!st.days[foodDate])st.days[foodDate]={date:foodDate,items:[]};
     its.forEach(i=>st.days[foodDate].items.push(Object.assign({},i,{id:uid(),t:Date.now()})));persist('f',foodDate);render();haptic('ok');toast('Скопировано из вчера: '+its.length+'.');return;}
   if((el=t.closest('[data-fent]'))){const [d,id]=el.dataset.fent.split('|');const it=dayItems(d).find(x=>x.id===id);if(!it)return;openAmount({src:srcFromItem(it),entry:it,date:d});return;}
@@ -2699,6 +2709,8 @@ document.addEventListener('click',e=>{const t=e.target;let el;
   if((el=t.closest('[data-funit]'))&&FD.food){FD.food.units.push({n:'шт',g:''});renderFoodForm();return;}
   if((el=t.closest('[data-fudel]'))&&FD.food){FD.food.units.splice(+el.dataset.fudel,1);renderFoodForm();return;}
   if((el=t.closest('[data-fsavefood]'))){saveFood();return;}
+  if(t.closest('[data-fbind]')){const n=$('[data-ff="name"]');if(n&&FD.food)FD.food.name=n.value;bindStart();return;}
+  if(t.closest('[data-fbindx]')){const B=FD.bind;FD.bind=null;if(FD.food&&B){FD.foodRet=B.ret;renderFoodForm();}else closeSheet();return;}
   if((el=t.closest('[data-fdelfood]'))){const f=FD.recipe&&sheetKind==='frecipe'?FD.recipe:FD.food;if(!f)return;confirmBox({title:'Удалить «'+(f.name||'')+'»?',text:'Записи в дневнике останутся. Вернуть можно из корзины.',onOk:()=>{delete st.foods[f.id];persist('m',f.id);closeSheet();render();toast('Удалено.');}});return;}
   if((el=t.closest('[data-fingadd]'))&&FD.recipe){FD.pick=true;FD.q='';FD.seg='freq';FD.off=null;renderFoodAdd();return;}
   if((el=t.closest('[data-fing]'))&&FD.recipe){const n=+el.dataset.fing;const i=FD.recipe.ings[n];if(!i)return;FD.amount={src:{ref:i.ref,name:i.name,per:i.per,units:i.units||[],kind:'ing'},entry:null,meal:'b',u:i.u||'г',q:i.q||i.g,ing:n};renderAmount();return;}
