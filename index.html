@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<meta name="apple-mobile-web-app-title" content="Метрика">
+<meta name="application-name" content="Метрика">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#eef5f5">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
 <title>Метрика</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -611,7 +620,7 @@ const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLL
 let SRV=SYNC_URL; // сервер, с которым работаем: основной или личный сервер пользователя
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='3.9';
+const APP_VER='4.0';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -2915,12 +2924,18 @@ function shareCard(){if(!(TGA&&SYNC_URL)||!SY.ready||!SY.owner)return '';
   return h+'</section>';}
 function refreshShareUI(){const el=$('#shareCard');if(el)el.outerHTML=shareCard();}
 function protectCard(){if(!(SY.ready&&SY.owner))return '';return '<section class="card"><div class="h"><h2>Защита данных</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Все прошлые версии и удалённое хранятся. Каждую ночь делается резервная копия.</p><div class="row"><button type="button" class="btn sm" data-act="changelog">Журнал изменений</button><button type="button" class="btn sm" data-act="trash">Корзина</button><button type="button" class="btn sm" data-act="backups">Резервные копии</button></div></section>';}
+/* значок «Метрики» на экране «Домой» — средствами Telegram (Bot API 8.0+) */
+function homeScrSlot(){const box=$('#homeScr');if(!box||!TGA||!TGA.addToHomeScreen||!(TGA.isVersionAtLeast&&TGA.isVersionAtLeast('8.0')))return;
+  const show=st=>{if(st==='unsupported'||st==='added'){box.innerHTML=st==='added'?'<p class="note" style="margin:0 2px">Значок «Метрики» уже на экране «Домой».</p>':'';return;}
+    box.innerHTML='<button type="button" class="btn block" data-act="homescr">📲 Добавить «Метрику» на экран «Домой»</button>';};
+  try{TGA.checkHomeScreenStatus?TGA.checkHomeScreenStatus(show):show('unknown');}catch(e){show('unknown');}
+  try{if(!homeScrSlot.ev){homeScrSlot.ev=1;TGA.onEvent('homeScreenAdded',()=>{toast('Готово — значок на экране «Домой».');homeScrSlot();});}}catch(e){}}
 function openSettings(){refreshHello();try{loadInvites();}catch(e){}
   openSheet(top('Настройки')+'<div class="stack">'+(profList().length&&(SY.ready||!TGA)?'<button type="button" class="btn primary block big-cta" data-act="pdf">'+ICON.dl+'Отчёт для врача (PDF) — '+esc(curP().name)+'</button>':'')+
    diagCard()+planCard()+familyCard()+shareCard()+readableCard()+protectCard()+medCard()+
    '<section class="card"><div class="h"><h2>Распознавание бланков</h2></div><p class="small" style="margin:0;color:var(--txt-2)">'+(SY.ai?'Подключена нейросеть Gemini — распознаёт точнее.':'Работает встроенное распознавание текста Google Диска. Для большей точности можно подключить ключ Gemini в настройках скрипта (GEMINI_KEY).')+'</p></section>'+
    (SY.ro?'':'<section class="card"><div class="h"><h2>Импорт истории</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Файл импорта (.json) с анализами за прошлые годы. Повторы пропускаются автоматически.</p><label class="btn block" style="position:relative">'+ICON.up.replace('<svg','<svg width="18" height="18" style="stroke:currentColor;fill:none;stroke-width:2"')+'Выбрать файл импорта<input type="file" accept=".json,application/json" data-import style="position:absolute;inset:0;opacity:0"></label><div style="margin-top:12px">'+healthImportBlock()+'</div></section>')+
-   '<section class="card"><div class="h"><h2>Оформление</h2></div><div class="seg" role="group">'+[['auto','Как в системе'],['light','Светлая'],['dark','Тёмная']].map(([k,l])=>'<button type="button" data-theme-set="'+k+'" aria-pressed="'+((localTheme()||'auto')===k)+'">'+l+'</button>').join('')+'</div></section>'+'<p class="note" style="margin:0">Версия '+APP_VER+(TGA?(TGA.initData?' · Telegram ✓':' · Telegram без подписи'):'')+'</p></div>','settings');}
+   '<div id="homeScr"></div>'+'<section class="card"><div class="h"><h2>Оформление</h2></div><div class="seg" role="group">'+[['auto','Как в системе'],['light','Светлая'],['dark','Тёмная']].map(([k,l])=>'<button type="button" data-theme-set="'+k+'" aria-pressed="'+((localTheme()||'auto')===k)+'">'+l+'</button>').join('')+'</div></section>'+'<p class="note" style="margin:0">Версия '+APP_VER+(TGA?(TGA.initData?' · Telegram ✓':' · Telegram без подписи'):'')+'</p></div>','settings');homeScrSlot();}
 const fmtAgo=at=>{if(!at)return '';const d=Date.now()-at;if(d<60e3)return 'только что';if(d<3600e3)return Math.round(d/60e3)+' мин назад';const t=new Date(at);return (ymd(t)===ymd(today())?'сегодня':fmtDs(ymd(t)))+', '+t.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});};
 function loadingSheet(t){openSheet(top(t)+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div></section></div>');}
 async function openLog(){loadingSheet('Журнал изменений');try{const r=await api('log',{limit:200});const it=r.items||[];openSheet(top('Журнал изменений')+'<div class="stack">'+(it.length?'<section class="card"><div class="list">'+it.map(x=>'<div class="li" style="cursor:default"><span class="dot acc"></span><div><div class="t">'+esc(x.title)+'</div><div class="s" style="color:var(--txt-2)">'+esc(x.what)+'</div><div class="s">'+esc(x.by||'—')+' · '+fmtAgo(x.at)+'</div></div><div class="r"></div></div>').join('')+'</div></section>':'<section class="card"><div class="empty">Изменений пока нет.</div></section>')+'</div>');}catch(e){openSheet(top('Журнал изменений')+'<div class="stack"><section class="card"><div class="empty">Не получилось загрузить.</div></section></div>');}}
@@ -2994,6 +3009,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
     else if(a==='rvsave')saveReview();
     else if(a==='deltest'){const id=draft&&draft.edit;const t=st.tests[id];if(!t)return;confirmBox({title:'Удалить анализ от '+fmtD(t.date)+'?',text:'Показатели из него пропадут из графиков. Вернуть можно из корзины.',onOk:()=>{delete st.tests[id];persist('a',id);draft=null;closeSheet();toast('Анализ удалён.');}});}
     else if(a==='pdf')exportPDF(el);
+    else if(a==='homescr'){try{TGA.addToHomeScreen();}catch(e){toast('Не получилось — добавьте через приложение «Команды», см. подсказку.');}}
     else if(a==='changelog')openLog();
     else if(a==='trash')openTrash();
     else if(a==='backups')openBackups();
