@@ -502,6 +502,7 @@ body.dragmode{-webkit-user-select:none;user-select:none}
 .hchips{display:flex;flex-wrap:wrap;gap:6px}
 .hchip{display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:4px 9px;border-radius:999px;background:var(--surface);border:1px solid var(--line)}
 /* экономия батареи: фон и кнопки без постоянной анимации */
+.gate .tabbar,.gate #openMe{display:none!important}
 .wgls{display:flex;flex-wrap:wrap;gap:0}
 .wgl{appearance:none;border:0;background:transparent;padding:7px 0;border-radius:12px;cursor:pointer;line-height:0;flex:1 1 0;min-width:26px;max-width:40px;display:flex;justify-content:center}
 .wgl svg{fill:transparent;stroke:var(--line-2);stroke-width:1.6;stroke-linejoin:round}
@@ -623,9 +624,13 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLLw7v9IiseKBo10V4rF1Hdm1Wdb-Pz9ZlsLZzygOKjTyB/exec';
 let SRV=SYNC_URL; // сервер, с которым работаем: основной или личный сервер пользователя
+let WEBTOK='';try{WEBTOK=(!TGA&&localStorage.getItem('metrika-webtok'))||'';}catch(e){}   // ключ входа в браузере (выдаётся после подтверждения в Telegram)
+const AUTH=()=>!!(TGA||WEBTOK);
+const WEB_OK=!TGA&&/^https?:$/.test(location.protocol)&&!!SYNC_URL&&SYNC_URL.indexOf('%%')!==0;
+const webGate=()=>WEB_OK&&!WEBTOK&&lsGet('metrika-weblocal')!=='1';
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='4.1';
+const APP_VER='4.2';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -855,8 +860,8 @@ const SY={on:false,ready:false,state:'',me:null,owner:false,role:'',ro:false,mem
 const lsGet=k=>{try{return localStorage.getItem(k);}catch(e){return null;}};
 const lsSet=(k,v)=>{try{if(v)localStorage.setItem(k,v);else localStorage.removeItem(k);}catch(e){}};
 async function api(op,data){
-  const r=await fetch(SRV,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({op,initData:TGA?TGA.initData:''},data||{}))});
-  const j=await r.json();if(!j.ok){const e=new Error(j.err||'fail');e.code=j.err;e.msg=j.msg;throw e;}return j;}
+  const r=await fetch(SRV,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({op,initData:TGA?TGA.initData:'',token:TGA?undefined:(WEBTOK||undefined)},data||{}))});
+  const j=await r.json();if(!j.ok){if(j.err==='auth'&&!TGA&&WEBTOK)webAuthLost();const e=new Error(j.err||'fail');e.code=j.err;e.msg=j.msg;throw e;}return j;}
 function savePending(){lsSet('health-pending',Object.keys(SY.pending).length?JSON.stringify(Object.keys(SY.pending)):'');}
 function queueKey(k){SY.pending[k]=++SY.seq;savePending();clearTimeout(SY.pt);SY.pt=setTimeout(syncPush,400);updSync();}
 function noteMeta(docs){(docs||[]).forEach(d=>{if(d&&d.key){SY.meta[d.key]={by:d.by||'',at:+d.at||0};SY.srv[d.key]=JSON.stringify(d.body);}});}
@@ -884,7 +889,7 @@ function refreshAfterSync(){render();if(sheet.hidden)return;const a=document.act
   else if(sheetKind==='ind'&&sheetId){const sc=sheet.scrollTop;openIndicator(sheetId);sheet.scrollTop=sc;}}
 function setRole(r){SY.role=r||'';SY.ro=SY.ready&&SY.role==='viewer';document.body.classList.toggle('ro',SY.ro);}
 async function syncConnect(){
-  if(!TGA||!SYNC_URL||SYNC_URL.indexOf('%%')===0)return;
+  if(!AUTH()||!SYNC_URL||SYNC_URL.indexOf('%%')===0)return;
   try{
     const sv=(lsGet('health-since')||'').split('|');const hasLocal=Object.keys(st.profiles).length>0;
     const since0=hasLocal&&sv[0]===SRV&&+sv[1]&&Date.now()-(+sv[1])<14*864e5?+sv[1]:0;   // с прошлого входа — только изменения
@@ -902,11 +907,11 @@ async function syncConnect(){
     SY.since=pl.now-1000;lsSet('health-since',SRV+'|'+SY.since);SY.on=true;SY.ready=true;SY.state='ok';SY.okAt=Date.now();S.tg=false;mode='shared';lsSet('health-shared','1');setRole(h.role||'editor');
     if(SY.ro){SY.pending={};savePending();}
     render();if(h.joined&&h.owner)toast(PERSONAL?'Приложение привязано к вашему Telegram. Другие его данные не увидят.':'Вы — организатор. Остальные члены семьи смогут присоединиться, а вы подтвердите их в настройках.');
-    try{queueSummary(1500);}catch(e){}syncPush();if(SY.owner)loadBlocked();SY.lastErr='';
+    try{queueSummary(1500);}catch(e){}syncPush();if(SY.owner)loadBlocked();SY.lastErr='';try{webApprovePrompt();}catch(e){}
   }catch(e){SY.state='err';SY.lastErr=(e&&(e.code||e.name||e.message))||'fail';SY.lastMsg=(e&&e.message)||'';}
   updSync();}
 function loadBlocked(){api('blocked').then(r=>{SY.blocked=r.blocked||[];SY.requests=r.requests||SY.requests;updSync();refreshShareUI();}).catch(()=>{});}
-function refreshHello(){if(!TGA||!SYNC_URL)return;if(!SY.ready&&SY.state!=='pending'){return;}
+function refreshHello(){if(!AUTH()||!SYNC_URL)return;if(!SY.ready&&SY.state!=='pending'){return;}
   api('hello').then(h=>{if(!h.member){if(SY.ready){SY.on=false;SY.ready=false;lsSet('health-shared','');setRole('');toast('Доступ закрыт.');}SY.state=(h.blocked||h.private)?'blocked':'pending';render();return;}
     if(!SY.ready){syncConnect();return;}
     SY.members=h.members||SY.members;SY.owner=!!h.owner;SY.requests=h.requests||[];SY.ai=!!h.ai;const was=SY.ro;setRole(h.role||'editor');if(was!==SY.ro){render();toast(SY.ro?'Теперь у вас доступ только для просмотра.':'Теперь вы можете вносить изменения.');}updSync();refreshShareUI();}).catch(()=>{});}
@@ -915,7 +920,7 @@ function updSync(){const b=$('#openSettings');if(b){const s2=!(TGA&&SYNC_URL)||!
   const el=$('#syncStatus');if(el)el.textContent=syncText();}
 function syncText(){if(!SY.ready)return SY.on?'Нет связи с сервером. Изменения сохранены на телефоне и отправятся позже.':'Подключаюсь…';if(SY.state==='err')return 'Нет связи с сервером. Изменения отправятся позже.';
   if(Object.keys(SY.pending).length||SY.busy)return 'Отправляю изменения…';return 'Всё синхронизировано'+(SY.okAt?' · '+new Date(SY.okAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'');}
-function startSync(){if(!TGA||!SYNC_URL||SYNC_URL.indexOf('%%')===0)return;
+function startSync(){if(!AUTH()||!SYNC_URL||SYNC_URL.indexOf('%%')===0)return;
   JSON.parse(lsGet('health-pending')||'[]').forEach(k=>{SY.pending[k]=++SY.seq;});
   if(lsGet('health-shared')==='1'){SY.on=true;mode='shared';}
   updSync();syncConnect();
@@ -930,6 +935,7 @@ async function initStore(){
       if(keys.length){const vals=await new Promise(res=>TGA.CloudStorage.getItems(keys,(e,v)=>res(e?{}:v||{})));const docs={};Object.keys(vals).forEach(k=>{try{docs[k]=JSON.parse(vals[k]);}catch(e){}});applyDocs(docs,true);}}
     else mode='local';
     await pickServer();startSync();
+  }else if(WEBTOK){mode='local';await pickServer();startSync();   // в браузере после входа через Telegram
   }else if(window.claude&&window.claude.use){
     try{const db=await window.claude.use('db');if(db){S.db=db;mode='cloud';const snap=await db.collection('h').get();if(!snap.empty){const docs={};snap.docs.forEach(d=>docs[d.id]=d.data());applyDocs(docs,true);}}else mode='local';}catch(e){mode='local';}
   }else mode='local';
@@ -1008,6 +1014,8 @@ function render(){
   const p=curP();
   $('#brandSub').textContent=p?p.name+(ageOf(p)!=null?', '+ageOf(p)+' '+plural(ageOf(p),'год','года','лет'):''):'Анализы и динамика';
   document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===tab)));
+  document.body.classList.toggle('gate',webGate());
+  if(webGate()){view.innerHTML=webLoginHTML();return;}
   if(SY.state==='pending'||SY.state==='blocked'||SY.state==='invite'||SY.state==='ownsetup'){view.innerHTML=accessHTML();return;}
   if(!profList().length){view.innerHTML=welcomeHTML();return;}
   view.innerHTML=(tab==='home'?homeHTML():tab==='food'?foodHTML():tab==='tests'?testsHTML():tab==='docs'?docsHTML():tab==='ind'?indHTML():famHTML());
@@ -2815,7 +2823,7 @@ function ownSetupHTML(){const from=ownerName();
    '<button type="button" class="btn block ghost" data-act="ownskip">Пока выбрать простой вариант</button>';}
 async function ownLink(){const i=$('#ownurl');const url=(i&&i.value||'').trim();if(!OWN_RE.test(url)){toast('Нужен адрес вида https://script.google.com/macros/s/…/exec');return;}
   if(!SY.mkey){toast('Сначала откройте приглашение заново.');return;}toast('Подключаю личный сервер…');
-  try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({op:'link',hub:SYNC_URL,key:SY.mkey,initData:TGA?TGA.initData:''})});const j=await r.json();
+  try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({op:'link',hub:SYNC_URL,key:SY.mkey,initData:TGA?TGA.initData:'',token:TGA?undefined:(WEBTOK||undefined)})});const j=await r.json();
     if(!j.ok){toast(j.err==='hub_denied'?'Основной сервер не подтвердил вход — попробуйте ещё раз.':j.err==='taken'?'Этот сервер уже подключён к другому человеку.':j.err==='not_personal'?'Это не личный сервер: в нём не должно быть свойства BOT_TOKEN.':'Не получилось: '+(j.msg||j.err||'ошибка'));return;}
     saveServer(url);SY.state='';toast(j.imported?'Личный сервер подключён. Перенесено записей: '+j.imported+'.':'Личный сервер подключён.');haptic('ok');await syncConnect();render();}
   catch(e){toast('Сервер не отвечает. Проверьте: развёртывание — «Веб-приложение», доступ «Все», адрес заканчивается на /exec.');}}
@@ -2966,18 +2974,54 @@ function notifySlot(){if(!SY.ready)return;if(SY.notify)notifyDraw();api('notify_
 function notifyToggle(k){if(!SY.notify)return;const n=Object.assign({},SY.notify);n[k]=!n[k];SY.notify=n;notifyDraw();
   api('notify_set',{eve:!!n.eve,week:!!n.week,tz:-new Date().getTimezoneOffset()}).then(r=>{if(r&&r.notify){SY.notify=r.notify;notifyDraw();}if(r&&r.trig===false)toast('Сохранил, но сервер не смог включить расписание. Откройте Apps Script и один раз запустите функцию enableReminders.');else toast(n[k]?'Напоминание включено.':'Напоминание выключено.');})
    .catch(()=>{n[k]=!n[k];SY.notify=n;notifyDraw();toast('Не получилось сохранить — проверьте интернет.');});}
-/* значок «Метрики» на экране «Домой» — средствами Telegram (Bot API 8.0+) */
-function homeScrSlot(){const box=$('#homeScr');if(!box||!TGA||!TGA.addToHomeScreen||!(TGA.isVersionAtLeast&&TGA.isVersionAtLeast('8.0')))return;
-  const show=st=>{if(st==='unsupported'||st==='added'){box.innerHTML=st==='added'?'<p class="note" style="margin:0 2px">Значок «Метрики» уже на экране «Домой».</p>':'';return;}
-    box.innerHTML='<button type="button" class="btn block" data-act="homescr">📲 Добавить «Метрику» на экран «Домой»</button>';};
-  try{TGA.checkHomeScreenStatus?TGA.checkHomeScreenStatus(show):show('unknown');}catch(e){show('unknown');}
-  try{if(!homeScrSlot.ev){homeScrSlot.ev=1;TGA.onEvent('homeScreenAdded',()=>{toast('Готово — значок на экране «Домой».');homeScrSlot();});}}catch(e){}}
+/* ---------- вход в браузере через Telegram: «Метрика» как веб-приложение на экране «Домой» ---------- */
+const WL={secret:'',code:'',pin:'',bot:'',err:'',timer:0,busy:false,polling:false};
+const hexOf=buf=>Array.from(new Uint8Array(buf)).map(b=>('0'+b.toString(16)).slice(-2)).join('');
+const pinOf=code=>('000'+(parseInt(String(code).slice(0,8),16)%10000)).slice(-4);
+function webUA(){const u=navigator.userAgent||'';return (/iPhone/.test(u)?'iPhone':/iPad/.test(u)?'iPad':/Android/.test(u)?'Android':/Mac/.test(u)?'Mac':/Windows/.test(u)?'Windows':'Браузер');}
+async function hubPost(op,data){const r=await fetch(SYNC_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({op,initData:TGA?TGA.initData:'',token:TGA?undefined:(WEBTOK||undefined)},data||{}))});
+  const j=await r.json();if(!j.ok){const e=new Error(j.err||'fail');e.code=j.err;throw e;}return j;}
+/* сервер не узнал ключ входа: переспрашиваем основной сервер и только тогда выходим (личный сервер мог просто не дозвониться) */
+function webAuthLost(){if(webAuthLost.busy)return;webAuthLost.busy=1;hubPost('web_list').then(()=>{webAuthLost.busy=0;}).catch(e=>{webAuthLost.busy=0;if(e&&e.code==='auth'){webWipe();location.reload();}});}
+function webWipe(){try{Object.keys(localStorage).forEach(k=>{if(!/^(health-theme|metrika-sdb-check|metrika-fdb-check)$/.test(k))localStorage.removeItem(k);});}catch(e){}WEBTOK='';}
+async function webLoginInit(force){if(WL.busy)return;WL.busy=true;WL.err='';
+  try{let sv=null;try{sv=JSON.parse(lsGet('metrika-weblogin')||'null');}catch(e){}
+    if(!force&&sv&&sv.secret&&Date.now()-sv.at<13*60000){WL.secret=sv.secret;WL.code=sv.code;}
+    else{const b=new Uint8Array(32);crypto.getRandomValues(b);WL.secret=hexOf(b);WL.code=hexOf(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(WL.secret))).slice(0,16);lsSet('metrika-weblogin',JSON.stringify({secret:WL.secret,code:WL.code,at:Date.now()}));}
+    WL.pin=pinOf(WL.code);const r=await hubPost('web_start',{code:WL.code});WL.bot=r.bot||'';
+  }catch(e){WL.err=e&&e.code==='bad_op'?'Сервер ещё не обновлён — вход в браузере появится после обновления.':'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.';}
+  WL.busy=false;if(webGate())render();
+  if(!WL.timer){WL.timer=setInterval(()=>{if(!document.hidden)webLoginPoll();},2500);document.addEventListener('visibilitychange',()=>{if(!document.hidden)webLoginPoll();});}}
+async function webLoginPoll(){if(!webGate()||!WL.secret||WL.polling||WL.err)return;WL.polling=true;
+  try{const r=await hubPost('web_poll',{secret:WL.secret,ua:webUA()});
+    if(r.token){lsSet('metrika-webtok',r.token);lsSet('metrika-weblogin','');lsSet('metrika-weblocal','');if(r.srv&&OWN_RE.test(r.srv))lsSet('metrika-srv',r.srv);location.reload();return;}
+    if(r.pending&&!r.alive){WL.polling=false;await webLoginInit(true);return;}
+  }catch(e){}WL.polling=false;}
+function webLoginHTML(){if(!WL.secret&&!WL.busy&&!WL.err)setTimeout(()=>webLoginInit(),0);const ok=WL.bot&&WL.code&&!WL.err;
+  return '<section class="hero" style="text-align:center"><img src="apple-touch-icon.png" alt="" width="84" height="84" style="border-radius:20px;display:block;margin:0 auto 10px"><div class="names">'+APP_NAME+'</div><div class="when">Войдите через Telegram — и здесь появятся ваши анализы, дневник питания и всё остальное.</div></section>'+
+   '<section class="card"><div class="stack" style="gap:14px">'+
+   (WL.err?'<p class="note" style="margin:0;text-align:center">'+WL.err+'</p><button type="button" class="btn primary block big-cta" data-act="webretry">Повторить</button>'
+    :ok?'<a class="btn primary block big-cta" style="text-decoration:none" href="tg://resolve?domain='+esc(WL.bot)+'&startapp=web_'+WL.code+'">Войти через Telegram</a>'+
+      '<div style="text-align:center"><div class="small muted">Код подтверждения</div><div style="font-size:36px;font-weight:700;letter-spacing:.18em;margin:2px 0 6px">'+WL.pin+'</div><div class="small muted">В Telegram откроется «Метрика» с таким же кодом. Нажмите там «Разрешить вход» и вернитесь сюда — вход произойдёт сам.</div></div>'+
+      '<a class="small" style="text-align:center;color:var(--accent-ink)" href="https://t.me/'+esc(WL.bot)+'?startapp=web_'+WL.code+'" target="_blank" rel="noopener">Telegram не открылся? Нажмите здесь</a>'
+    :'<div style="text-align:center"><div class="spin"></div><div class="small muted" style="margin-top:8px">Готовлю вход…</div></div>')+
+   '</div></section><p class="note" style="text-align:center"><button type="button" style="background:none;border:0;padding:0;font:inherit;color:var(--accent-ink);text-decoration:underline;cursor:pointer" data-act="weblocal">Продолжить без входа</button><br>Тогда данные будут только на этом устройстве.</p>';}
+/* в Telegram: подтверждение входа, который начали в браузере */
+function webApprovePrompt(){if(!TGA||webApprovePrompt.done)return;const sp=String((TGA.initDataUnsafe&&TGA.initDataUnsafe.start_param)||'');const m=sp.match(/^web_([0-9a-f]{16})$/);if(!m)return;webApprovePrompt.done=1;WL.code=m[1];
+  openSheet(top('Вход в браузере')+'<div class="stack"><section class="card" style="text-align:center"><p style="margin:0 0 8px">«Метрику» открыли в браузере и хотят войти под вашим именем. Если это вы — сверьте код:</p><div style="font-size:40px;font-weight:700;letter-spacing:.18em">'+pinOf(m[1])+'</div><p class="small muted" style="margin:8px 0 0">Код должен совпадать с тем, что показан в браузере. Если вы ничего не открывали — нажмите «Отмена».</p></section>'+
+   '<button type="button" class="btn primary block big-cta" data-act="webok">Разрешить вход</button><button type="button" class="btn block" data-close>Отмена</button></div>','webok');}
+function webSlot(){const box=$('#webSlot');if(!box)return;
+  if(!TGA){if(WEBTOK)box.innerHTML='<section class="card"><div class="h"><h2>Вход через Telegram</h2></div><p class="small muted" style="margin:0 0 10px">Вы вошли как <b>'+esc((SY.me&&SY.me.name)||'…')+'</b>. Данные те же, что в Telegram.</p><button type="button" class="btn block" data-act="weblogout">Выйти на этом устройстве</button></section>';return;}
+  if(!SY.ready)return;const url=location.href.split(/[?#]/)[0];
+  hubPost('web_list').then(r=>{const ss=r.sessions||[];
+    box.innerHTML='<section class="card"><div class="h"><h2>Значок на экране «Домой»</h2></div><p class="small muted" style="margin:0 0 8px">«Метрику» можно открывать как отдельное приложение, без Telegram:</p><ol class="steps"><li>Откройте в Safari ссылку <button type="button" style="background:none;border:0;padding:0;font:inherit;color:var(--accent-ink);text-decoration:underline;cursor:pointer" data-copy="'+esc(url)+'">скопировать</button><br><span class="small muted">'+esc(url.replace(/^https?:\/\//,''))+'</span></li><li>«Поделиться» → «На экран „Домой“».</li><li>Откройте значок и нажмите «Войти через Telegram».</li></ol>'+
+     (ss.length?'<p class="small" style="margin:10px 0 8px">Вход выполнен: '+ss.map(x=>esc(x.ua||'устройство')+' · '+new Date(x.at).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})).join(', ')+'.</p><button type="button" class="btn sm" data-act="webrevoke">Выйти на всех устройствах</button>':'')+'</section>';}).catch(()=>{});}
 function openSettings(){refreshHello();try{loadInvites();}catch(e){}
   openSheet(top('Настройки')+'<div class="stack">'+(profList().length&&(SY.ready||!TGA)?'<button type="button" class="btn primary block big-cta" data-act="pdf">'+ICON.dl+'Отчёт для врача (PDF) — '+esc(curP().name)+'</button>':'')+
    diagCard()+planCard()+familyCard()+shareCard()+readableCard()+protectCard()+medCard()+
    '<section class="card"><div class="h"><h2>Распознавание бланков</h2></div><p class="small" style="margin:0;color:var(--txt-2)">'+(SY.ai?'Подключена нейросеть Gemini — распознаёт точнее.':'Работает встроенное распознавание текста Google Диска. Для большей точности можно подключить ключ Gemini в настройках скрипта (GEMINI_KEY).')+'</p></section>'+
    (SY.ro?'':'<section class="card"><div class="h"><h2>Импорт истории</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Файл импорта (.json) с анализами за прошлые годы. Повторы пропускаются автоматически.</p><label class="btn block" style="position:relative">'+ICON.up.replace('<svg','<svg width="18" height="18" style="stroke:currentColor;fill:none;stroke-width:2"')+'Выбрать файл импорта<input type="file" accept=".json,application/json" data-import style="position:absolute;inset:0;opacity:0"></label><div style="margin-top:12px">'+healthImportBlock()+'</div></section>')+
-   '<div id="notifySlot"></div><div id="homeScr"></div>'+'<section class="card"><div class="h"><h2>Оформление</h2></div><div class="seg" role="group">'+[['auto','Как в системе'],['light','Светлая'],['dark','Тёмная']].map(([k,l])=>'<button type="button" data-theme-set="'+k+'" aria-pressed="'+((localTheme()||'auto')===k)+'">'+l+'</button>').join('')+'</div></section>'+'<p class="note" style="margin:0">Версия '+APP_VER+(TGA?(TGA.initData?' · Telegram ✓':' · Telegram без подписи'):'')+'</p></div>','settings');homeScrSlot();notifySlot();}
+   '<div id="notifySlot"></div><div id="webSlot"></div>'+'<section class="card"><div class="h"><h2>Оформление</h2></div><div class="seg" role="group">'+[['auto','Как в системе'],['light','Светлая'],['dark','Тёмная']].map(([k,l])=>'<button type="button" data-theme-set="'+k+'" aria-pressed="'+((localTheme()||'auto')===k)+'">'+l+'</button>').join('')+'</div></section>'+'<p class="note" style="margin:0">Версия '+APP_VER+(TGA?(TGA.initData?' · Telegram ✓':' · Telegram без подписи'):'')+'</p></div>','settings');notifySlot();webSlot();}
 const fmtAgo=at=>{if(!at)return '';const d=Date.now()-at;if(d<60e3)return 'только что';if(d<3600e3)return Math.round(d/60e3)+' мин назад';const t=new Date(at);return (ymd(t)===ymd(today())?'сегодня':fmtDs(ymd(t)))+', '+t.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});};
 function loadingSheet(t){openSheet(top(t)+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div></section></div>');}
 async function openLog(){loadingSheet('Журнал изменений');try{const r=await api('log',{limit:200});const it=r.items||[];openSheet(top('Журнал изменений')+'<div class="stack">'+(it.length?'<section class="card"><div class="list">'+it.map(x=>'<div class="li" style="cursor:default"><span class="dot acc"></span><div><div class="t">'+esc(x.title)+'</div><div class="s" style="color:var(--txt-2)">'+esc(x.what)+'</div><div class="s">'+esc(x.by||'—')+' · '+fmtAgo(x.at)+'</div></div><div class="r"></div></div>').join('')+'</div></section>':'<section class="card"><div class="empty">Изменений пока нет.</div></section>')+'</div>');}catch(e){openSheet(top('Журнал изменений')+'<div class="stack"><section class="card"><div class="empty">Не получилось загрузить.</div></section></div>');}}
@@ -3052,7 +3096,11 @@ document.addEventListener('click',e=>{const t=e.target;let el;
     else if(a==='rvsave')saveReview();
     else if(a==='deltest'){const id=draft&&draft.edit;const t=st.tests[id];if(!t)return;confirmBox({title:'Удалить анализ от '+fmtD(t.date)+'?',text:'Показатели из него пропадут из графиков. Вернуть можно из корзины.',onOk:()=>{delete st.tests[id];persist('a',id);draft=null;closeSheet();toast('Анализ удалён.');}});}
     else if(a==='pdf')exportPDF(el);
-    else if(a==='homescr'){try{TGA.addToHomeScreen();}catch(e){toast('Не получилось — добавьте через приложение «Команды», см. подсказку.');}}
+    else if(a==='webretry'){WL.err='';WL.secret='';render();}
+    else if(a==='weblocal'){lsSet('metrika-weblocal','1');render();}
+    else if(a==='webok'){el.disabled=true;hubPost('web_approve',{code:WL.code,srv:SRV!==SYNC_URL?SRV:''}).then(()=>{closeSheet();toast('Готово. Вернитесь в браузер — «Метрика» откроется сама.');}).catch(e=>{el.disabled=false;toast(e.code==='expired'?'Код устарел. В браузере нажмите «Войти через Telegram» ещё раз.':e.code==='not_member'?'Сначала получите доступ к «Метрике».':e.code==='bad_op'?'Сервер ещё не обновлён.':'Не получилось — проверьте интернет.');});}
+    else if(a==='weblogout'){hubPost('web_revoke',{self:true}).catch(()=>{}).then(()=>{webWipe();location.reload();});}
+    else if(a==='webrevoke'){hubPost('web_revoke',{all:true}).then(()=>{toast('Готово: вход в браузере закрыт на всех устройствах.');webSlot();}).catch(()=>toast('Не получилось — проверьте интернет.'));}
     else if(a==='changelog')openLog();
     else if(a==='trash')openTrash();
     else if(a==='backups')openBackups();

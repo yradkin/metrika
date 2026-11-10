@@ -25,7 +25,7 @@
 const MAX_AGE_SEC = 30 * 24 * 3600; // сколько живёт подпись Telegram
 const HISTORY_MAX = 5000;        // сколько прошлых версий хранить
 const BACKUP_KEEP = 40;          // сколько резервных копий хранить
-const SERVER_VERSION = 14; // v14: общие штрихкоды (кто-то один привязал — находят все) и напоминания от бота; v13: у каждого друга своя папка и таблица
+const SERVER_VERSION = 15; // v15: вход в браузере через Telegram (веб-приложение на экране «Домой»); v14: общие штрихкоды и напоминания от бота
 // v12: v12: быстрее — чтение без очереди (блокировка только для записи), hello сразу отдаёт изменения с прошлого входа
 // v11: v11: общая библиотека продуктов и рецептов с авторами; здоровье в ленте близких (по желанию)
 // v10: v10: родные и друзья по приглашению (у каждого своё пространство), личный сервер с резервной копией у владельца, лента прогресса с реакциями
@@ -191,8 +191,9 @@ function doPost(e) {
   let req;
   try { req = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, err: 'bad_json' }); }
   if (/^(verify|mirror_push|mirror_pull|mirror_file|mirror_readable|hub_feed|hub_react|hub_lib|hub_code_get|hub_code_put|hub_notify_get|hub_notify_set)$/.test(req.op || '')) { try { return out_(hubApi_(req)); } catch (err) { return out_({ ok: false, err: 'server', msg: String(err) }); } }
+  if (req.op === 'web_start' || req.op === 'web_poll') { try { return out_(webLogin_(req)); } catch (err) { return out_({ ok: false, err: 'server', msg: String(err) }); } }
   if (req.op === 'link') { try { return out_(link_(req)); } catch (err) { return out_({ ok: false, err: 'server', msg: String(err) }); } }
-  const user = auth_(req.initData);
+  const user = auth_(req.initData) || webAuth_(req.token);
   if (!user) return out_({ ok: false, err: 'auth' });
 
   const lock = LockService.getScriptLock();
@@ -227,6 +228,7 @@ function doPost(e) {
     if (req.op === 'join') return out_(join_(m, me, user, req));
     if (!me) return out_({ ok: false, err: 'not_member' });
     CUR = me;
+    if (/^web_(approve|list|revoke)$/.test(req.op)) { try { lock.releaseLock(); } catch (e3) {} return out_(webSessOp_(me, user, req)); }
     // лента прогресса: на личном сервере — через основной
     if (/^(feed|react|lib|code_get|code_put|notify_get|notify_set)$/.test(req.op)) {
       if (isClone_()) { try { lock.releaseLock(); } catch (e3) {} const P = PropertiesService.getScriptProperties(); const r = hubCall_(P.getProperty('HUB_URL'), Object.assign({}, req, { op: 'hub_' + req.op, mkey: P.getProperty('HUB_KEY'), initData: '' })); return out_(r || { ok: false, err: 'hub_down' }); }
@@ -942,7 +944,7 @@ function hubApi_(req) {
   try {
     const m = members_(); const rec = m.list.find(x => x.mkey && x.mkey === String(req.mkey || ''));
     if (!rec) return { ok: false, err: 'bad_key' };
-    if (req.op === 'verify') { const u = auth_(req.initData); if (!u || u.id !== rec.id) return { ok: false, err: 'auth' }; rec.linkedAt = rec.linkedAt || Date.now(); saveMembers_(m); return { ok: true, user: u }; }
+    if (req.op === 'verify') { const u = auth_(req.initData) || webAuth_(req.token); if (!u || u.id !== rec.id) return { ok: false, err: 'auth' }; rec.linkedAt = rec.linkedAt || Date.now(); saveMembers_(m); return { ok: true, user: u }; }
     CUR = rec;
     if (req.op === 'mirror_push') { const r = push_(req.docs || [], { id: rec.id, name: rec.name }, true, rec, false, true); const m2 = members_(); const r2 = m2.list.find(x => x.id === rec.id); if (r2) { r2.mirrorAt = Date.now(); saveMembers_(m2); } return r; }
     if (req.op === 'mirror_pull') return pull_(+req.since || 0, rec);
@@ -989,15 +991,15 @@ function link_(req) {
     return { ok: true, imported: imported };
   } finally { try { lock.releaseLock(); } catch (e) {} }
 }
-function cloneAuth_(initData) {
+function cloneAuth_(initData, token) {
   const P = PropertiesService.getScriptProperties(); const hub = P.getProperty('HUB_URL'), key = P.getProperty('HUB_KEY');
   if (!hub || !key) return null;
   const c = CacheService.getScriptCache();
-  const ck = 'v' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(initData))).slice(0, 40);
+  const ck = 'v' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(initData || token))).slice(0, 40);
   const hit = c.get(ck); if (hit) return JSON.parse(hit);
-  const r = hubCall_(hub, { op: 'verify', mkey: key, initData: initData });
+  const r = hubCall_(hub, { op: 'verify', mkey: key, initData: initData || '', token: token || '' });
   if (!r || !r.ok || !r.user) return null;
-  c.put(ck, JSON.stringify(r.user), 21600); return r.user;
+  c.put(ck, JSON.stringify(r.user), token ? 1800 : 21600); return r.user;
 }
 function mirrorOut_(keys) {
   const P = PropertiesService.getScriptProperties(); const hub = P.getProperty('HUB_URL'), key = P.getProperty('HUB_KEY');
@@ -1074,6 +1076,71 @@ function react_(me, req) {
     if (to !== me.id) { try { tg_('sendMessage', { chat_id: to, text: me.name + ' ' + emoji + ' — ваш день ' + day.split('-').reverse().slice(0, 2).join('.') + ' в «Метрике»' }); } catch (e) {} }
   }
   return feed_(me);
+}
+
+/* ---------- вход в браузере: «Метрика» как веб-приложение на экране «Домой» ----------
+   Браузер придумывает секрет и показывает ссылку на бота с кодом (код = начало SHA-256 от секрета).
+   Человек открывает ссылку в Telegram и подтверждает вход — там его личность уже проверена подписью Telegram.
+   После этого браузер по своему секрету получает ключ входа. Ключ хранится только на том устройстве; здесь — лишь его отпечаток. */
+function hex_(bytes) { return bytes.map(b => ('0' + ((b + 256) % 256).toString(16)).slice(-2)).join(''); }
+function sha_(str) { return hex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(str))); }
+function webSess_() { const raw = PropertiesService.getScriptProperties().getProperty('WEBSESS'); return raw ? JSON.parse(raw) : {}; }
+function saveWebSess_(o) { PropertiesService.getScriptProperties().setProperty('WEBSESS', JSON.stringify(o)); }
+const WEB_DAYS = 200;   // сколько дней действует вход в браузере
+function webAuth_(token) {
+  token = String(token || ''); if (!/^[0-9a-f]{48,80}$/.test(token)) return null;
+  if (isClone_()) return cloneAuth_('', token);
+  const x = webSess_()[sha_(token).slice(0, 32)];
+  if (!x || Date.now() - (x.at || 0) > WEB_DAYS * 864e5) return null;
+  return { id: x.id, name: x.name, web: true };
+}
+function webLogin_(req) {
+  if (isClone_()) return { ok: false, err: 'not_hub' };
+  const c = CacheService.getScriptCache();
+  if (req.op === 'web_start') {
+    const code0 = String(req.code || ''); if (!/^[0-9a-f]{16}$/.test(code0)) return { ok: false, err: 'bad_code' };
+    c.put('ws_' + code0, '1', 900);
+    return { ok: true, bot: botName_() };
+  }
+  const secret = String(req.secret || ''); if (!/^[0-9a-f]{64}$/.test(secret)) return { ok: false, err: 'bad_code' };
+  const code = sha_(secret).slice(0, 16);
+  const hit = c.get('wp_' + code);
+  if (!hit) return { ok: true, pending: true, alive: !!c.get('ws_' + code) };
+  const a = JSON.parse(hit); const token = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+    const all = webSess_(), now = Date.now();
+    Object.keys(all).forEach(k => { if (now - (all[k].at || 0) > WEB_DAYS * 864e5) delete all[k]; });
+    const byAge = ks => ks.sort((x, y) => (all[x].at || 0) - (all[y].at || 0));
+    const mine = byAge(Object.keys(all).filter(k => all[k].id === a.id)); while (mine.length >= 5) delete all[mine.shift()];   // не больше 5 устройств на человека
+    const rest = byAge(Object.keys(all)); while (rest.length >= 45) delete all[rest.shift()];
+    all[sha_(token).slice(0, 32)] = { id: a.id, name: a.name, at: now, ua: String(req.ua || '').replace(/[^\w .,()А-Яа-яЁё-]/g, '').slice(0, 40) };
+    saveWebSess_(all);
+  } finally { try { lock.releaseLock(); } catch (e) {} }
+  c.remove('wp_' + code); c.remove('ws_' + code);
+  return { ok: true, token: token, user: { id: a.id, name: a.name }, srv: a.srv || '' };
+}
+function webSessOp_(me, user, req) {
+  if (isClone_()) return { ok: false, err: 'not_hub' };
+  if (req.op === 'web_approve') {
+    if (user.web) return { ok: false, err: 'tg_only' };   // подтвердить вход можно только из Telegram
+    const code = String(req.code || ''); if (!/^[0-9a-f]{16}$/.test(code)) return { ok: false, err: 'bad_code' };
+    const c = CacheService.getScriptCache(); if (!c.get('ws_' + code)) return { ok: false, err: 'expired' };
+    const srv = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec\/?$/.test(String(req.srv || '')) ? String(req.srv) : '';
+    c.put('wp_' + code, JSON.stringify({ id: user.id, name: user.name, srv: srv }), 600);
+    return { ok: true };
+  }
+  const list = o => Object.keys(o).filter(k => o[k].id === me.id).map(k => ({ k: k.slice(0, 10), at: o[k].at, ua: o[k].ua || '' })).sort((x, y) => y.at - x.at);
+  if (req.op === 'web_list') return { ok: true, sessions: list(webSess_()) };
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+    const all = webSess_(); const cur = req.token ? sha_(String(req.token)).slice(0, 32) : '';
+    Object.keys(all).forEach(k => { if (all[k].id !== me.id) return; if (req.all || (req.k && k.slice(0, 10) === String(req.k)) || (req.self && k === cur)) delete all[k]; });
+    saveWebSess_(all);
+    return { ok: true, sessions: list(all) };
+  } finally { try { lock.releaseLock(); } catch (e) {} }
 }
 
 /* ---------- общие штрихкоды: кто-то один привязал штрихкод к продукту — находят все ---------- */
