@@ -502,6 +502,11 @@ body.dragmode{-webkit-user-select:none;user-select:none}
 .hchips{display:flex;flex-wrap:wrap;gap:6px}
 .hchip{display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:4px 9px;border-radius:999px;background:var(--surface);border:1px solid var(--line)}
 /* экономия батареи: фон и кнопки без постоянной анимации */
+.wgls{display:flex;flex-wrap:wrap;gap:0}
+.wgl{appearance:none;border:0;background:transparent;padding:7px 0;border-radius:12px;cursor:pointer;line-height:0;flex:1 1 0;min-width:26px;max-width:40px;display:flex;justify-content:center}
+.wgl svg{fill:transparent;stroke:var(--line-2);stroke-width:1.6;stroke-linejoin:round}
+.wgl.on svg{fill:#4aa3e8;stroke:#4aa3e8}
+.wgl.ex:not(.on) svg{stroke-dasharray:3 3}
 .aura i,.hero::before,.btn.primary::before{animation:none!important}
 .aura i{will-change:auto!important}
 /* ===== Питание ===== */
@@ -620,7 +625,7 @@ const SYNC_URL='https://script.google.com/macros/s/AKfycbzSPiXsfvy3THOvPubX9SDLL
 let SRV=SYNC_URL; // сервер, с которым работаем: основной или личный сервер пользователя
 const PERSONAL=true; // личный режим: один владелец, без семьи и запросов доступа
 const APP_NAME='Метрика';
-const APP_VER='4.0';
+const APP_VER='4.1';
 
 /* ---------- Каталог показателей ----------
    [код, название, синонимы, единица, группа, норма М [от,до], норма Ж [от,до], пояснение]
@@ -2319,9 +2324,21 @@ function fdbSrc(i){const r=FDB.rows[i];const units=[];if(r[7])units.push({n:'п�
   const o={name:r[1],brand:r[2],code:/^(00)?9999/.test(r[0])?'':r[0],per:{k:r[3],p:r[4],f:r[5],c:r[6]},units};return {ref:'',name:r[1],brand:r[2],per:o.per,units,kind:'off',off:o,by:/^481/.test(r[0])};}
 const BRAND_AL={харрис:'harrys',хэррис:'harrys',савушкин:'savushkin',милкавита:'milkavita',данон:'danone',активиа:'activia',простоквашино:'prostokvashino'};
 function fdbSearch(q,words,lim){if(!FDB.rows)return [];const al=words.map(w=>{const k=Object.keys(BRAND_AL).find(b=>b.startsWith(w)&&w.length>=4);return k?BRAND_AL[k]:null;});if(al.some(Boolean)){const alt=words.map((w,i)=>al[i]||w);const r1=fdbSearch0(q,words,lim);const r2=fdbSearch0(alt.join(' '),alt,lim);return r1.concat(r2.filter(x=>!r1.some(y=>y.name===x.name&&y.brand===x.brand))).slice(0,lim);}return fdbSearch0(q,words,lim);}
+/* ---------- нечёткий поиск: опечатка в одну букву, сокращения в названиях («сгущ.»), неверная раскладка ---------- */
+function ed1(a,b){if(a===b)return true;const la=a.length,lb=b.length;if(Math.abs(la-lb)>1)return false;let i=0;while(i<la&&i<lb&&a[i]===b[i])i++;
+  if(la===lb)return a.slice(i+1)===b.slice(i+1)||(a[i]===b[i+1]&&a[i+1]===b[i]&&a.slice(i+2)===b.slice(i+2));
+  return la>lb?a.slice(i+1)===b.slice(i):a.slice(i)===b.slice(i+1);}
+function fuzzyWord(r,toks){const L=r.length;for(const t of toks){if(t.length>=4&&t.length<L&&r.startsWith(t))return true;
+  if(L>=5&&t.length>=L-1&&(ed1(r,t.slice(0,L))||ed1(r,t.slice(0,L-1))||ed1(r,t.slice(0,L+1))))return true;}return false;}
+function fuzzyHit(x,words,raws){let toks=null;for(let j=0;j<words.length;j++){if(x.includes(words[j]))continue;const r=raws[j]||words[j];if(r.length<4)return false;toks=toks||x.split(' ');if(!fuzzyWord(r,toks))return false;}return true;}
+function fuzzyExtra(n,out,q,words,lim){if(out.length>=6||q.length<4)return [];const raws=q.split(' ');const has=new Set(out);const ex=[];
+  for(let i=0;i<n.length&&ex.length<lim*3;i++){if(!has.has(i)&&fuzzyHit(n[i],words,raws))ex.push(i);}
+  return ex.sort((a,b)=>n[a].length-n[b].length).slice(0,lim);}
+const EN_RU=(()=>{const en="qwertyuiop[]asdfghjkl;'zxcvbnm,.`",ru='йцукенгшщзхъфывапролджэячсмитьбюё';const m={};for(let i=0;i<en.length;i++)m[en[i]]=ru[i];return m;})();
+const enRu=s=>String(s||'').toLowerCase().split('').map(c=>EN_RU[c]||c).join('');
 function fdbSearch0(q,words,lim){const out=[];const n=FDB.n;for(let i=0;i<n.length;i++){const x=n[i];let ok=true;for(const w of words){if(!x.includes(w)){ok=false;break;}}if(ok)out.push(i);}
   const sc=i=>{const x=n[i];return (x.startsWith(q)?0:x.startsWith(words[0])?1:(' '+x).includes(' '+words[0])?2:3)*1000-(/^481/.test(FDB.rows[i][0])?500:0)+x.length;};
-  return out.sort((a,b)=>sc(a)-sc(b)).slice(0,lim).map(fdbSrc);}
+  const ex=fuzzyExtra(n,out,q,words,lim);return out.sort((a,b)=>sc(a)-sc(b)).concat(ex).slice(0,lim).map(fdbSrc);}
 /* ---------- товары магазинов (Green, Евроопт, Корона) — файл stores.json рядом с приложением ---------- */
 const STORES_V='2026-11-02.1518';
 const STORES_URL=/^https?:/.test(location.protocol)?'stores.json':'https://yradkin.github.io/metrika/stores.json';
@@ -2338,7 +2355,7 @@ function sdbSrc(i){const r=SDB.rows[i];const units=Array.isArray(r[11])?r[11].ma
   const o={name:r[1],brand:r[2],code:r[0]||'',per:{k:r[3],p:r[4],f:r[5],c:r[6]},units};return {ref:'',name:r[1],brand:r[2],per:o.per,units,kind:'off',off:o,store:storeLine(r),own:!!r[10],rest,by:/^481/.test(r[0])};}
 function sdbSearch(q,words,lim){if(!SDB.rows)return [];const out=[];const n=SDB.n;for(let i=0;i<n.length;i++){const x=n[i];let ok=true;for(const w of words){if(!x.includes(w)){ok=false;break;}}if(ok)out.push(i);}
   const sc=i=>{const x=n[i];return (x.startsWith(q)?0:x.startsWith(words[0])?1:(' '+x).includes(' '+words[0])?2:3)*1000-(SDB.rows[i][10]?300:0)+x.length;};
-  return out.sort((a,b)=>sc(a)-sc(b)).slice(0,lim).map(sdbSrc);}
+  const ex=fuzzyExtra(n,out,q,words,lim);return out.sort((a,b)=>sc(a)-sc(b)).concat(ex).slice(0,lim).map(sdbSrc);}
 /* собственное производство магазина — по категориям */
 function sdbOwn(store){if(!SDB.rows)return [];const g={};SDB.rows.forEach((r,i)=>{if(!r[10]||!String(r[8]).includes(store))return;let c=SDB.cats[r[9]]||'Другое';c=c.replace(/^Корона: /,'').split(' / ').slice(-1)[0];(g[c]=g[c]||[]).push(i);});
   return Object.entries(g).sort((a,b)=>a[0].localeCompare(b[0],'ru')).map(([c,a])=>[c,a.sort((x,y)=>SDB.rows[x][1].localeCompare(SDB.rows[y][1],'ru')).map(sdbSrc)]);}
@@ -2388,6 +2405,15 @@ function foodHTML(){const p=curP();setTimeout(fdbLoad,0);
   return h+diaryHTML(p);}
 function dayLabel(d){const t=ymd(today());if(d===t)return 'Сегодня';if(d===addDays(t,-1))return 'Вчера';if(d===addDays(t,1))return 'Завтра';return parseD(d).toLocaleDateString('ru-RU',{weekday:'long'}).replace(/^./,c=>c.toUpperCase());}
 function ring(pct,col,size,inner){const a=Math.max(0,Math.min(100,pct||0));return '<span class="fring" style="width:'+size+'px;height:'+size+'px;background:conic-gradient('+col+' '+a*3.6+'deg,var(--line) 0)"><span>'+(inner||'')+'</span></span>';}
+/* ---------- вода: стаканы по 250 мл, хранится в дневнике дня (поле w, мл) ---------- */
+const GLASS=250;
+const DROP='<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 3.2c3.2 4 5.6 7 5.6 10.2a5.6 5.6 0 0 1-11.2 0C6.4 10.2 8.8 7.2 12 3.2z"/></svg>';
+function waterGoal(p){const g=num(p&&p.food&&p.food.water);if(g)return Math.max(GLASS,Math.round(g/GLASS)*GLASS);const w=(wlogGet(p||{}).slice(-1)[0]||{}).kg;return w?Math.min(4000,Math.max(1500,Math.round(w*30/GLASS)*GLASS)):2000;}
+function waterOf(d){const x=st.days[d];return (x&&+x.w)||0;}
+function waterSet(d,ml){ml=Math.max(0,Math.min(8000,Math.round(ml)));if(!st.days[d]){if(!ml)return;st.days[d]={date:d,items:[]};}st.days[d].w=ml;persist('f',d);}
+function waterCard(p,d){const g=waterGoal(p);const w=waterOf(d);const n=Math.round(g/GLASS);const full=Math.floor(w/GLASS+1e-6);const cells=Math.min(16,Math.max(n,full+(full>=n?1:0)));
+  let c='';for(let i=0;i<cells;i++)c+='<button type="button" class="wgl'+(i<full?' on':'')+(i>=n?' ex':'')+'" data-fwater="'+(i+1)+'" aria-label="'+(i+1)*GLASS+' мл">'+DROP+'</button>';
+  return '<section class="card wtr"><div class="h" style="margin-bottom:6px"><h2>Вода</h2><span class="small muted"><b style="color:var(--txt)">'+(w/1000).toLocaleString('ru-RU',{maximumFractionDigits:2})+'</b> из '+(g/1000).toLocaleString('ru-RU',{maximumFractionDigits:2})+' л'+(w>=g?' ✓':'')+'</span></div><div class="wgls">'+c+'</div></section>';}
 function diaryHTML(p){const G=foodGoal(p);const d=foodDate;const items=dayItems(d);const S=sumItems(items);
   const mon=mondayOf(d);const t=ymd(today());const sk=streakOf();
   let h='<div class="fdate"><button type="button" class="iconbtn" data-fday="'+addDays(d,-1)+'" aria-label="Предыдущий день">'+ICON.back+'</button><label class="fdl"><b>'+dayLabel(d)+'</b><span>'+fmtD(d)+'</span><input type="date" data-fdate value="'+d+'"></label><button type="button" class="iconbtn" data-fday="'+addDays(d,1)+'" aria-label="Следующий день" style="transform:scaleX(-1)">'+ICON.back+'</button></div>';
@@ -2399,6 +2425,7 @@ function diaryHTML(p){const G=foodGoal(p);const d=foodDate;const items=dayItems(
   h+='<section class="card ftotc"><div class="ftot"><div><b>'+fT(S.f)+'</b><span>Жиры</span></div><div><b>'+fT(S.c)+'</b><span>Углев.</span></div><div><b>'+fT(S.p)+'</b><span>Белки</span></div><div><b>'+pct+'%</b><span>от цели</span></div><div class="kc"><b>'+r0(S.k)+'</b><span>ккал</span></div></div>'+
     '<div class="fbar"><i style="width:'+Math.min(100,pct)+'%;background:'+(pct>110?'var(--crit)':'var(--accent)')+'"></i></div><div class="small muted" style="display:flex;justify-content:space-between;margin-top:6px"><span>Цель '+G.k+' ккал</span><span>'+(left>=0?'осталось <b style="color:var(--txt)">'+r0(left)+'</b>':'<b style="color:var(--crit)">+'+r0(-left)+'</b> сверх цели')+'</span></div>'+
     '<div class="fmac">'+[['p','Белки',S.p,G.p],['f','Жиры',S.f,G.f],['c','Углеводы',S.c,G.c]].map(([k,l,v,g])=>'<div><div class="small"><span>'+l+'</span><span class="muted">'+r0(v)+' / '+g+' г</span></div><div class="fbar thin"><i style="width:'+Math.min(100,v/g*100)+'%;background:'+MAC_COL[k]+'"></i></div></div>').join('')+'</div></section>';
+  h+=waterCard(p,d);
   const y=addDays(d,-1);
   MEALS.forEach(([m,nm,ic])=>{const its=items.filter(i=>i.meal===m);const s=sumItems(its);const col=FD.collapsed[m];
     h+='<section class="card meal"><div class="mh" data-fcol="'+m+'"><span class="mic">'+ic+'</span><div style="min-width:0"><div class="mt">'+nm+(its.length?' <span class="muted" style="font-weight:600">'+(col?'▸':'▾')+'</span>':'')+'</div><div class="ms">'+(its.length?'Б '+fT(s.p)+' · Ж '+fT(s.f)+' · У '+fT(s.c)+' · '+Math.round(s.k/G.k*100)+'%':'пусто')+'</div></div><div class="mkc">'+(its.length?r0(s.k)+'<small>ккал</small>':'')+'</div><button type="button" class="fplus" data-fadd="'+m+'" aria-label="Добавить в '+nm+'">'+ICON.plus+'</button></div>';
@@ -2419,12 +2446,13 @@ const CAT_EM={'Крупы и гарниры':'🍚','Хлеб и выпечка'
 const srcEmoji=s=>s.store?(s.rest?'🍴':s.own?'🧑‍🍳':'🛒'):s.shl?(s.shl.m.kind==='recipe'?'🥘':'👥'):s.kind==='recipe'?'🥘':s.kind==='off'?'🌍':s.kind==='base'?(CAT_EM[s.cat]||'🍽'):s.kind==='food'?'🥫':'🕘';
 function srcRow(s,extra,i){const a=extra&&extra.amt;const kc=a?r0(s.per.k*a.g/100):r0(s.per.k);
   return '<div class="frow" data-fsrc="'+i+'">'+(s.photo?'<img class="fph" src="'+s.photo+'" alt="">':'<span class="fph">'+srcEmoji(s)+'</span>')+'<div style="min-width:0"><div class="t">'+esc(s.name)+(s.fav?' <span style="color:#e2a400">★</span>':'')+'</div><div class="s">'+(s.author?'👤 '+esc(s.author)+' · ':s.from?'от '+esc(s.from)+' · ':'')+(s.by?'🇧🇾 ':'')+(s.store?esc(s.store)+(s.own&&!s.rest?' (своё пр-во)':'')+' · ':'')+(s.brand&&!(s.store&&s.own)?esc(s.brand)+' · ':'')+(a?(a.u&&a.u!=='г'?fN(a.q)+' '+esc(a.u):fN(a.g)+' г')+' · '+kc+' ккал':'100 г · '+kc+' ккал')+(extra&&extra.n?' · '+extra.n+'×':'')+'</div></div><button type="button" class="fplus sm" data-fquick="'+i+'" aria-label="Добавить сразу">'+ICON.plus+'</button></div>';}
-function addLists(){const U=usage();const q=nrm(FD.q);const words=q?q.split(' ').map(stemW):[];const hit=n=>{const x=nrm(n);return words.every(w=>x.includes(w));};
+function addLists(){const L=addLists0(FD.q);if(FD.q&&/^[a-z\[\];',.`\s]+$/i.test(FD.q)&&!L.groups.some(g=>g[1].length)){const alt=enRu(FD.q);const L2=addLists0(alt);if(L2.groups.some(g=>g[1].length)){L2.alt=alt;return L2;}}return L;}
+function addLists0(qs){const U=usage();const q=nrm(qs);const raws=q?q.split(' '):[];const words=raws.map(stemW);const hit=n=>{const x=nrm(n);return words.every(w=>x.includes(w));};const hitF=n=>q.length>=4&&fuzzyHit(nrm(n),words,raws);
   const score=n=>{const x=nrm(n);return (x.startsWith(q)?0:x.split(' ').some(w=>w.startsWith(words[0]))?1:2)*1000+x.length;};
   const mine=myFoods().map(f=>Object.assign(srcOf(f),{fav:!!f.fav}));
-  if(q){const a=mine.filter(s=>hit(s.name+' '+s.brand)).sort((x,y)=>score(x.name)-score(y.name));
+  if(q){let a=mine.filter(s=>hit(s.name+' '+s.brand)).sort((x,y)=>score(x.name)-score(y.name));if(a.length<3)a=a.concat(mine.filter(s=>!hit(s.name+' '+s.brand)&&hitF(s.name+' '+s.brand)));
     const u=Object.values(U).filter(x=>!x.it.ref&&hit(x.it.name)).map(x=>srcFromItem(x.it));
-    const b=FOODBASE.filter(f=>hit(f.name)).sort((x,y)=>score(x.name)-score(y.name)).map(srcOf);
+    let b=FOODBASE.filter(f=>hit(f.name)).sort((x,y)=>score(x.name)-score(y.name)).map(srcOf);if(b.length<3)b=b.concat(FOODBASE.filter(f=>!hit(f.name)&&hitF(f.name)).map(srcOf));
     const sr=sdbSearch(q,words,40);const brAll=fdbSearch(q,words,40);const br=brAll.filter(x=>!(x.off.code&&SDB.byCode&&SDB.byCode[x.off.code]!=null));const sh=shlSearch(words,hit);
     return {groups:[['Мои продукты и рецепты',a.concat(u)],['От друзей',sh],['Блюда и базовые продукты',b.slice(0,br.length||sr.length?15:40)],['Магазины и кафе',sr],['Продукты и бренды',br]].concat(FD.off&&FD.offQ===FD.q?[['Ещё из Open Food Facts',FD.off.filter(o=>!br.some(x=>x.off.code&&x.off.code===o.off.code))]]:[]),U};}
   if(FD.seg==='freq'){const arr=Object.values(U).sort((x,y)=>{const mx=(y.meals[FD.meal]||0)-(x.meals[FD.meal]||0);return (y.n+(y.meals[FD.meal]||0)*2)-(x.n+(x.meals[FD.meal]||0)*2)||mx;}).slice(0,30).map(x=>Object.assign(srcFromItem(x.it),{n:x.n}));
@@ -2437,6 +2465,7 @@ function addLists(){const U=usage();const q=nrm(FD.q);const words=q?q.split(' ')
 function addBodyHTML(){const L=addLists();FD.list=[];
   let body='';if(L.shop){body+='<div class="seg" role="group">'+Object.entries(STORE_N).map(([k,n])=>'<button type="button" data-fshop="'+k+'" aria-pressed="'+((FD.shop||'e')===k)+'">'+n+'</button>').join('')+'</div><p class="note" style="margin:0 2px">'+(REST_ST.includes(FD.shop||'e')?'Меню с КБЖУ на 100 г; порция — вес блюда по данным ресторана.':'Собственное производство и кулинария магазина. Остальные товары '+(SDB.rows?'('+SDB.rows.length.toLocaleString('ru-RU')+')':'')+' — через поиск или скан штрихкода.')+'</p>';if(!SDB.rows)body+='<section class="card" style="text-align:center">'+(SDB.err?'<div class="small muted">Не удалось загрузить товары магазинов — проверьте интернет.</div><button type="button" class="btn sm" data-fsdb>Повторить</button>':'<div class="spin"></div><div class="small muted">Загружаю товары магазинов — один раз…</div>')+'</section>';}L.groups.forEach(([t,arr])=>{if(!arr.length)return;body+='<div class="yr" style="margin:6px 2px 0">'+esc(t)+'</div><section class="card" style="padding:4px 14px"><div class="list">'+arr.map(x=>{const i=FD.list.push(x)-1;return srcRow(x,{amt:(FD.seg==='freq'&&!FD.q)||x.kind==='item'?lastAmount(x,L.U):null,n:FD.q?0:x.n},i);}).join('')+'</div></section>';});
   if(!body)body='<section class="card"><div class="empty">'+(FD.q?'Среди своих и базовых продуктов не нашлось.':FD.seg==='freq'?'Здесь появятся продукты, которые вы едите чаще всего, — для ввода в одно касание.':FD.seg==='rec'?'Рецептов пока нет. Соберите блюдо из продуктов — и вводите его одной строкой.':'Своих продуктов пока нет. Отсканируйте штрихкод или создайте продукт.')+'</div></section>';
+  if(L.alt)body='<p class="note" style="margin:0 2px">Показываю результаты для «'+esc(L.alt)+'» — похоже, была включена английская раскладка.</p>'+body;
   if(FD.q&&!FDB.rows)body+='<p class="note" style="text-align:center">'+(FDB.busy?'Загружаю базу продуктов и брендов — один раз, около минуты…':FDB.err==='old'?'Обновите сервер до v7 — появится база брендов.':'База брендов загрузится, когда будет связь с сервером.')+'</p>';
   if(FD.q)body+=FD.offBusy?'<section class="card" style="text-align:center"><div class="spin"></div><div class="small muted">Ищу в Open Food Facts…</div></section>':(FD.offQ===FD.q&&FD.off&&!FD.off.length?'<p class="note" style="text-align:center">В Open Food Facts тоже не нашлось.</p>':FD.offQ!==FD.q?'<button type="button" class="btn block" data-foff>🌍 Искать «'+esc(FD.q)+'» в Open Food Facts</button>':'');
   return body;}
@@ -2455,12 +2484,13 @@ function quickAdd(s){if(FD.bind){bindPick(s);return;}const a=lastAmount(s);if(FD
 async function pickSrc(s){if(FD.bind){bindPick(s);return;}if(s.shl){const f=saveSharedFood(s.shl);s=srcOf(f);}else if(s.off){const f=saveOffFood(s.off);s=srcOf(f);}openAmount({src:s});}
 const hasCode=(f,code)=>!!code&&(f.code===code||(Array.isArray(f.codes)&&f.codes.includes(code)));
 /* штрихкод не нашёлся — привязываем его к продукту, найденному по названию */
+function codeShare(f,code){code=String(code||'').replace(/\D/g,'');if(!SY.ready||code.length<8||!f||!f.per)return;api('code_put',{code,food:{name:f.name,brand:f.brand||'',per:f.per,units:f.units||[]}}).catch(()=>{});}
 function bindStart(){const f=FD.food||{};FD.bind={code:String(f.code||'').replace(/\D/g,''),ret:FD.foodRet,lib:!!FD.libMode};FD.q=String(f.name||'').trim();FD.off=null;FD.offQ='';FD.pick=false;FD.seg='freq';renderFoodAdd();}
 function bindPick(s){const B=FD.bind;FD.bind=null;let f=null;
   if(s.shl)f=saveSharedFood(s.shl);else if(s.off)f=saveOffFood(s.off);else if(s.ref&&st.foods[s.ref])f=st.foods[s.ref];
   else{f={id:uid(),kind:'food',name:s.name,brand:s.brand||'',code:'',per:Object.assign({},s.per),units:JSON.parse(JSON.stringify(s.units||[])),src:s.kind==='base'?'base':'own',created:Date.now()};st.foods[f.id]=f;}
   if(!hasCode(f,B.code)){if(!f.code)f.code=B.code;else{f.codes=Array.isArray(f.codes)?f.codes:[];f.codes.push(B.code);}}
-  persist('m',f.id);haptic('ok');toast('Штрихкод '+B.code+' запомнил для «'+f.name+'». В следующий раз найдётся сразу.');
+  persist('m',f.id);haptic('ok');codeShare(f,B.code);toast('Штрихкод '+B.code+' запомнил для «'+f.name+'». В следующий раз найдётся сразу'+(SY.ready?' — у вас и у друзей.':'.'));
   if(B.lib){editFood(f.id);return;}openAmount({src:srcOf(f)});}
 function saveOffFood(o){const ex=(o.code&&myFoods().find(f=>f.code===o.code))||myFoods().find(f=>f.src==='off'&&f.name===o.name&&(f.brand||'')===(o.brand||''));if(ex)return ex;const f={id:uid(),kind:'food',name:o.name||('Продукт '+o.code),brand:o.brand||'',code:o.code||'',per:o.per,units:o.units||[],src:'off',created:Date.now()};st.foods[f.id]=f;persist('m',f.id);return f;}
 
@@ -2513,7 +2543,7 @@ function saveFood(){const f=FD.food;f.name=String(f.name||'').trim();if(!f.name)
   if(!f.per.k&&!f.per.p&&!f.per.f&&!f.per.c){toast('Укажите калорийность.');return;}
   f.units=(f.units||[]).map(u=>({n:String(u.n||'').trim(),g:num(u.g)})).filter(u=>u.n&&u.g>0);f.code=String(f.code||'').replace(/\D/g,'');
   if(JSON.stringify(f).length>45000){delete f.photo;toast('Фото слишком большое — сохранил без него.');}
-  st.foods[f.id]=f;persist('m',f.id);haptic('ok');
+  st.foods[f.id]=f;persist('m',f.id);haptic('ok');if(f.code&&f.shared!==false&&!f.from)codeShare(f,f.code);
   if(FD.foodRet==='add'){FD.foodRet=null;openAmount({src:srcOf(f)});return;}closeSheet();toast('Продукт сохранён.');}
 
 /* ---------- рецепт ---------- */
@@ -2574,13 +2604,14 @@ function reportHTML(p){const G=foodGoal(p);const days=weekDays();const t=ymd(tod
   return h;}
 
 /* ---------- цели ---------- */
-function openFoodGoals(){const p=curP();const G=foodGoal(p);FD.goal={act:G.act,goal:G.goal,kcal:G.custom?G.k:'',pp:G.pp,fp:G.fp,cp:G.cp};renderGoals();}
+function openFoodGoals(){const p=curP();const G=foodGoal(p);FD.goal={act:G.act,goal:G.goal,kcal:G.custom?G.k:'',pp:G.pp,fp:G.fp,cp:G.cp,water:(p.food&&p.food.water)||''};renderGoals();}
 function renderGoals(){const p=curP();const g=FD.goal;const G=foodGoal(Object.assign({},p,{food:g}));
   openSheet(topF('Цель по питанию','data-close')+'<div class="stack">'+
    '<section class="card"><div class="abig" style="text-align:center"><b>'+G.k+'</b> ккал в день</div><div class="small muted" style="text-align:center">'+(G.bmr?'Обмен в покое '+G.bmr+' ккал · вес '+fN(G.w)+' кг, рост '+G.h+' см, '+G.a+' '+plural(G.a,'год','года','лет'):'Чтобы посчитать точнее, укажите в профиле дату рождения, рост и вес.')+'</div></section>'+
    '<section class="card"><div class="stack" style="gap:12px"><div class="fld"><label>Цель</label><div class="seg" role="group">'+GOALS.map(([k,l])=>'<button type="button" data-fgoal="'+k+'" aria-pressed="'+(g.goal===k)+'">'+l+'</button>').join('')+'</div></div>'+
    '<div class="fld"><label>Активность</label><div class="seg" role="group">'+ACTS.map(([k,l])=>'<button type="button" data-fact="'+k+'" aria-pressed="'+(+g.act===k)+'">'+l+'</button>').join('')+'</div></div>'+
-   '<div class="fld"><label>Своя цель, ккал (необязательно)</label><input data-fg="kcal" inputmode="numeric" value="'+esc(g.kcal||'')+'" placeholder="по расчёту '+G.auto+'"></div></div></section>'+
+   '<div class="fld"><label>Своя цель, ккал (необязательно)</label><input data-fg="kcal" inputmode="numeric" value="'+esc(g.kcal||'')+'" placeholder="по расчёту '+G.auto+'"></div>'+
+   '<div class="fld"><label>Вода, мл в день (необязательно)</label><input data-fg="water" inputmode="numeric" value="'+esc(g.water||'')+'" placeholder="по расчёту '+waterGoal(Object.assign({},p,{food:{}}))+'"></div></div></section>'+
    '<section class="card"><div class="h"><h2>Доля белков, жиров и углеводов</h2></div><div class="nums4" style="grid-template-columns:repeat(3,1fr)">'+[['pp','Белки, %',G.p],['fp','Жиры, %',G.f],['cp','Углеводы, %',G.c]].map(([k,l,gr])=>'<div class="fld"><label>'+l+'</label><input data-fg="'+k+'" inputmode="numeric" value="'+esc(g[k])+'"><span class="small muted">'+gr+' г</span></div>').join('')+'</div><p class="note" style="margin:8px 0 0">Сумма должна быть 100%. Сейчас: '+((+g.pp||0)+(+g.fp||0)+(+g.cp||0))+'%.</p></section>'+
    '<button type="button" class="btn primary block big-cta" data-fgsave>Сохранить</button></div>','fgoals');}
 
@@ -2636,8 +2667,10 @@ async function lookupBarcode(code){code=String(code||'').replace(/\D/g,'');if(co
   try{await sdbLoad();}catch(e){}if(SDB.rows&&SDB.byCode[code]!=null){const f=saveOffFood(sdbSrc(SDB.byCode[code]).off);if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}
   if(FDB.rows&&FDB.byCode[code]!=null){const f=saveOffFood(fdbSrc(FDB.byCode[code]).off);if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}
   try{const sx=shlList().find(x=>x.m&&hasCode(x.m,code));if(sx){const f=saveSharedFood(sx);if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}}catch(e){}
-  openSheet(topF('Штрихкод '+code,'data-close')+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div><p class="small muted" style="margin:8px 0 0">Ищу в Open Food Facts…</p></section></div>','fbusy');
-  const r=await offGet(code);if(sheetKind!=='fbusy')return;
+  openSheet(topF('Штрихкод '+code,'data-close')+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div><p class="small muted" style="margin:8px 0 0">Ищу у друзей и в Open Food Facts…</p></section></div>','fbusy');
+  const [cr,r]=await Promise.all([SY.ready?api('code_get',{code}).catch(()=>null):null,offGet(code)]);if(sheetKind!=='fbusy')return;
+  if(cr&&cr.food&&cr.food.name&&cr.food.per&&!(r&&r.name&&r.per)){const f=saveOffFood(Object.assign({},cr.food,{code}));if(!hasCode(f,code)){f.codes=Array.isArray(f.codes)?f.codes:[];f.codes.push(code);persist('m',f.id);}
+    toast('Нашёл: '+f.name+(cr.by&&!cr.mine?' — штрихкод привязал(а) '+cr.by:'')+'.');if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}
   if(r&&r.name&&!r.per){editFood(null,{code,name:r.name,brand:r.brand},FD.libMode?null:'add');toast('Нашёл название, но без калорийности. Сфотографируйте этикетку — заполню КБЖУ.');return;}
   if(r&&r.name){const f=saveOffFood(r);toast('Нашёл: '+f.name+'. Сохранил в «Мои продукты».');if(FD.libMode){editFood(f.id);return;}openAmount({src:srcOf(f)});return;}
   editFood(null,{code},FD.libMode?null:'add');toast(r===null?'Нет связи с базой продуктов — найдите продукт по названию или заполните вручную.':'Штрихкода нет в базах. Найдите продукт по названию — штрихкод запомнится — или сфотографируйте этикетку.');}
@@ -2717,6 +2750,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
   if((el=t.closest('[data-fscan]'))){FD.libMode=tab==='food'&&foodSeg==='lib'&&sheet.hidden;if(sheet.hidden&&!FD.libMode){FD.meal=mealNow();FD.pick=false;}openScan();return;}
   if((el=t.closest('[data-funit]'))&&FD.food){FD.food.units.push({n:'шт',g:''});renderFoodForm();return;}
   if((el=t.closest('[data-fudel]'))&&FD.food){FD.food.units.splice(+el.dataset.fudel,1);renderFoodForm();return;}
+  if((el=t.closest('[data-fwater]'))){const i=+el.dataset.fwater;const full=Math.floor(waterOf(foodDate)/GLASS+1e-6);waterSet(foodDate,(i===full?i-1:i)*GLASS);haptic('ok');render();return;}
   if((el=t.closest('[data-fsavefood]'))){saveFood();return;}
   if(t.closest('[data-fbind]')){const n=$('[data-ff="name"]');if(n&&FD.food)FD.food.name=n.value;bindStart();return;}
   if(t.closest('[data-fbindx]')){const B=FD.bind;FD.bind=null;if(FD.food&&B){FD.foodRet=B.ret;renderFoodForm();}else closeSheet();return;}
@@ -2732,7 +2766,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
   if((el=t.closest('[data-fgoal]'))&&FD.goal){FD.goal.goal=el.dataset.fgoal;renderGoals();return;}
   if((el=t.closest('[data-fact]'))&&FD.goal){FD.goal.act=+el.dataset.fact;renderGoals();return;}
   if((el=t.closest('[data-fgsave]'))&&FD.goal){const g=FD.goal;const s=(+g.pp||0)+(+g.fp||0)+(+g.cp||0);if(Math.abs(s-100)>1){toast('Сумма долей должна быть 100%, сейчас '+s+'%.');return;}
-    const p=curP();p.food={act:g.act,goal:g.goal,kcal:num(g.kcal)||'',pp:+g.pp,fp:+g.fp,cp:+g.cp};persist('p',p.id);closeSheet();toast('Цель: '+foodGoal(p).k+' ккал в день.');return;}
+    const p=curP();p.food={act:g.act,goal:g.goal,kcal:num(g.kcal)||'',pp:+g.pp,fp:+g.fp,cp:+g.cp,water:num(g.water)||''};persist('p',p.id);closeSheet();toast('Цель: '+foodGoal(p).k+' ккал в день.');return;}
 });
 let fqT=0;
 document.addEventListener('input',e=>{const t=e.target;
@@ -2924,6 +2958,14 @@ function shareCard(){if(!(TGA&&SYNC_URL)||!SY.ready||!SY.owner)return '';
   return h+'</section>';}
 function refreshShareUI(){const el=$('#shareCard');if(el)el.outerHTML=shareCard();}
 function protectCard(){if(!(SY.ready&&SY.owner))return '';return '<section class="card"><div class="h"><h2>Защита данных</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Все прошлые версии и удалённое хранятся. Каждую ночь делается резервная копия.</p><div class="row"><button type="button" class="btn sm" data-act="changelog">Журнал изменений</button><button type="button" class="btn sm" data-act="trash">Корзина</button><button type="button" class="btn sm" data-act="backups">Резервные копии</button></div></section>';}
+/* напоминания от бота (сервер v14+): вечером, если дневник пуст, и итог недели */
+function notifyDraw(){const box=$('#notifySlot');if(!box||!SY.notify)return;const n=SY.notify;
+  const row=(k,t,s)=>'<div class="toggle"><div><div style="font-weight:600">'+t+'</div><div class="small muted">'+s+'</div></div><button type="button" class="sw'+(n[k]?' on':'')+'" data-notify="'+k+'" role="switch" aria-checked="'+!!n[k]+'" aria-label="'+t+'"></button></div>';
+  box.innerHTML='<section class="card"><div class="h"><h2>Напоминания от бота</h2></div>'+row('eve','Вечером, если дневник пуст','В 20:00 бот напомнит записать еду')+row('week','Итог недели','По воскресеньям в 20:00: дни в дневнике, средние калории, вес')+'</section>';}
+function notifySlot(){if(!SY.ready)return;if(SY.notify)notifyDraw();api('notify_get').then(r=>{if(r&&r.notify){SY.notify=r.notify;notifyDraw();}}).catch(()=>{});}
+function notifyToggle(k){if(!SY.notify)return;const n=Object.assign({},SY.notify);n[k]=!n[k];SY.notify=n;notifyDraw();
+  api('notify_set',{eve:!!n.eve,week:!!n.week,tz:-new Date().getTimezoneOffset()}).then(r=>{if(r&&r.notify){SY.notify=r.notify;notifyDraw();}if(r&&r.trig===false)toast('Сохранил, но сервер не смог включить расписание. Откройте Apps Script и один раз запустите функцию enableReminders.');else toast(n[k]?'Напоминание включено.':'Напоминание выключено.');})
+   .catch(()=>{n[k]=!n[k];SY.notify=n;notifyDraw();toast('Не получилось сохранить — проверьте интернет.');});}
 /* значок «Метрики» на экране «Домой» — средствами Telegram (Bot API 8.0+) */
 function homeScrSlot(){const box=$('#homeScr');if(!box||!TGA||!TGA.addToHomeScreen||!(TGA.isVersionAtLeast&&TGA.isVersionAtLeast('8.0')))return;
   const show=st=>{if(st==='unsupported'||st==='added'){box.innerHTML=st==='added'?'<p class="note" style="margin:0 2px">Значок «Метрики» уже на экране «Домой».</p>':'';return;}
@@ -2935,7 +2977,7 @@ function openSettings(){refreshHello();try{loadInvites();}catch(e){}
    diagCard()+planCard()+familyCard()+shareCard()+readableCard()+protectCard()+medCard()+
    '<section class="card"><div class="h"><h2>Распознавание бланков</h2></div><p class="small" style="margin:0;color:var(--txt-2)">'+(SY.ai?'Подключена нейросеть Gemini — распознаёт точнее.':'Работает встроенное распознавание текста Google Диска. Для большей точности можно подключить ключ Gemini в настройках скрипта (GEMINI_KEY).')+'</p></section>'+
    (SY.ro?'':'<section class="card"><div class="h"><h2>Импорт истории</h2></div><p class="small" style="margin:0 0 10px;color:var(--txt-2)">Файл импорта (.json) с анализами за прошлые годы. Повторы пропускаются автоматически.</p><label class="btn block" style="position:relative">'+ICON.up.replace('<svg','<svg width="18" height="18" style="stroke:currentColor;fill:none;stroke-width:2"')+'Выбрать файл импорта<input type="file" accept=".json,application/json" data-import style="position:absolute;inset:0;opacity:0"></label><div style="margin-top:12px">'+healthImportBlock()+'</div></section>')+
-   '<div id="homeScr"></div>'+'<section class="card"><div class="h"><h2>Оформление</h2></div><div class="seg" role="group">'+[['auto','Как в системе'],['light','Светлая'],['dark','Тёмная']].map(([k,l])=>'<button type="button" data-theme-set="'+k+'" aria-pressed="'+((localTheme()||'auto')===k)+'">'+l+'</button>').join('')+'</div></section>'+'<p class="note" style="margin:0">Версия '+APP_VER+(TGA?(TGA.initData?' · Telegram ✓':' · Telegram без подписи'):'')+'</p></div>','settings');homeScrSlot();}
+   '<div id="notifySlot"></div><div id="homeScr"></div>'+'<section class="card"><div class="h"><h2>Оформление</h2></div><div class="seg" role="group">'+[['auto','Как в системе'],['light','Светлая'],['dark','Тёмная']].map(([k,l])=>'<button type="button" data-theme-set="'+k+'" aria-pressed="'+((localTheme()||'auto')===k)+'">'+l+'</button>').join('')+'</div></section>'+'<p class="note" style="margin:0">Версия '+APP_VER+(TGA?(TGA.initData?' · Telegram ✓':' · Telegram без подписи'):'')+'</p></div>','settings');homeScrSlot();notifySlot();}
 const fmtAgo=at=>{if(!at)return '';const d=Date.now()-at;if(d<60e3)return 'только что';if(d<3600e3)return Math.round(d/60e3)+' мин назад';const t=new Date(at);return (ymd(t)===ymd(today())?'сегодня':fmtDs(ymd(t)))+', '+t.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});};
 function loadingSheet(t){openSheet(top(t)+'<div class="stack"><section class="card" style="text-align:center"><div class="spin"></div></section></div>');}
 async function openLog(){loadingSheet('Журнал изменений');try{const r=await api('log',{limit:200});const it=r.items||[];openSheet(top('Журнал изменений')+'<div class="stack">'+(it.length?'<section class="card"><div class="list">'+it.map(x=>'<div class="li" style="cursor:default"><span class="dot acc"></span><div><div class="t">'+esc(x.title)+'</div><div class="s" style="color:var(--txt-2)">'+esc(x.what)+'</div><div class="s">'+esc(x.by||'—')+' · '+fmtAgo(x.at)+'</div></div><div class="r"></div></div>').join('')+'</div></section>':'<section class="card"><div class="empty">Изменений пока нет.</div></section>')+'</div>');}catch(e){openSheet(top('Журнал изменений')+'<div class="stack"><section class="card"><div class="empty">Не получилось загрузить.</div></section></div>');}}
@@ -2970,6 +3012,7 @@ document.addEventListener('click',e=>{const t=e.target;let el;
   if((el=t.closest('[data-unblock]'))){api('unblock',{id:+el.dataset.unblock}).then(r=>{SY.members=r.members||SY.members;SY.blocked=r.blocked||[];refreshShareUI();toast('Доступ возвращён.');}).catch(()=>toast('Не получилось.'));return;}
   if((el=t.closest('[data-untrash]'))){const it=(SY.trash||[])[+el.dataset.untrash];if(!it)return;api('restore',{key:it.key,at:it.at}).then(()=>{setBody(it.key,it.body);saveLocal();openTrash();render();toast('Возвращено.');}).catch(()=>toast('Не получилось.'));return;}
   if((el=t.closest('[data-restoreb]'))){const it=(SY.bk||[])[+el.dataset.restoreb];if(!it)return;confirmBox({title:'Восстановить копию?',text:'Все данные станут как в копии «'+esc(it.name.replace(/\.json$/,''))+'». Текущее состояние перед этим сохранится.',protect:true,ok:'Восстановить',onOk:()=>{api('restore_backup',{id:it.id}).then(()=>{resyncAll();closeSheet();toast('Восстановлено.');}).catch(()=>toast('Не получилось.'));}});return;}
+  if((el=t.closest('[data-notify]'))){notifyToggle(el.dataset.notify);return;}
   if((el=t.closest('[data-theme-set]'))){const k=el.dataset.themeSet;try{if(k==='auto')localStorage.removeItem('health-theme');else localStorage.setItem('health-theme',k);}catch(err){}
     if(k==='auto'){if(TGA)document.documentElement.setAttribute('data-theme',TGA.colorScheme==='dark'?'dark':'light');else document.documentElement.removeAttribute('data-theme');}else document.documentElement.setAttribute('data-theme',k);tgColors();sheetIn.querySelectorAll('[data-theme-set]').forEach(b=>b.setAttribute('aria-pressed',String(b===el)));return;}
   if((el=t.closest('[data-sub]'))){sub=el.dataset.sub;render();return;}

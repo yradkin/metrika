@@ -25,7 +25,7 @@
 const MAX_AGE_SEC = 30 * 24 * 3600; // сколько живёт подпись Telegram
 const HISTORY_MAX = 5000;        // сколько прошлых версий хранить
 const BACKUP_KEEP = 40;          // сколько резервных копий хранить
-const SERVER_VERSION = 13; // v13: у каждого друга своя папка «Имя» и своя таблица данных; копии личных серверов — туда же
+const SERVER_VERSION = 14; // v14: общие штрихкоды (кто-то один привязал — находят все) и напоминания от бота; v13: у каждого друга своя папка и таблица
 // v12: v12: быстрее — чтение без очереди (блокировка только для записи), hello сразу отдаёт изменения с прошлого входа
 // v11: v11: общая библиотека продуктов и рецептов с авторами; здоровье в ленте близких (по желанию)
 // v10: v10: родные и друзья по приглашению (у каждого своё пространство), личный сервер с резервной копией у владельца, лента прогресса с реакциями
@@ -186,11 +186,11 @@ function doGet() {
   return out_({ ok: true, app: 'health-sync', v: SERVER_VERSION });
 }
 
-const WRITE_OPS = /^(push|join|plan|invite_new|invite_del|approve|deny|role|kick|unblock|restore|restore_backup|backup_now|react)$/;
+const WRITE_OPS = /^(push|join|plan|invite_new|invite_del|approve|deny|role|kick|unblock|restore|restore_backup|backup_now|react|code_put|notify_set)$/;
 function doPost(e) {
   let req;
   try { req = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, err: 'bad_json' }); }
-  if (/^(verify|mirror_push|mirror_pull|mirror_file|mirror_readable|hub_feed|hub_react|hub_lib)$/.test(req.op || '')) { try { return out_(hubApi_(req)); } catch (err) { return out_({ ok: false, err: 'server', msg: String(err) }); } }
+  if (/^(verify|mirror_push|mirror_pull|mirror_file|mirror_readable|hub_feed|hub_react|hub_lib|hub_code_get|hub_code_put|hub_notify_get|hub_notify_set)$/.test(req.op || '')) { try { return out_(hubApi_(req)); } catch (err) { return out_({ ok: false, err: 'server', msg: String(err) }); } }
   if (req.op === 'link') { try { return out_(link_(req)); } catch (err) { return out_({ ok: false, err: 'server', msg: String(err) }); } }
   const user = auth_(req.initData);
   if (!user) return out_({ ok: false, err: 'auth' });
@@ -221,15 +221,17 @@ function doPost(e) {
       return out_({ ok: true, member: !!me, owner: !!(me && me.owner), role: me ? roleOf_(me) : '', joined: joined, pending: pending, blocked: !me && isBlocked, private: !me && !isBlocked && priv,
         pull: me && req.since != null ? pull_(+req.since || 0, me.tenant ? me : null) : undefined,
         tenant: !!(me && me.tenant), plan: me && me.tenant ? me.plan : '', mkey: me && me.tenant ? me.mkey : '', hub: !isClone_(), personal: isClone_(), invite: invite,
-        you: { id: user.id, name: user.name }, members: me ? (me.tenant ? [me] : m.list.map(pubMember_)) : [], requests: me && me.owner ? requests_() : [], ai: !!PropertiesService.getScriptProperties().getProperty('GEMINI_KEY'), now: Date.now() });
+        you: { id: user.id, name: user.name }, members: me ? (me.tenant ? [me] : m.list.map(pubMember_)) : [], requests: me && me.owner ? requests_() : [], ai: !!PropertiesService.getScriptProperties().getProperty('GEMINI_KEY'), v: SERVER_VERSION, now: Date.now() });
     }
 
     if (req.op === 'join') return out_(join_(m, me, user, req));
     if (!me) return out_({ ok: false, err: 'not_member' });
     CUR = me;
     // лента прогресса: на личном сервере — через основной
-    if (req.op === 'feed' || req.op === 'react' || req.op === 'lib') {
+    if (/^(feed|react|lib|code_get|code_put|notify_get|notify_set)$/.test(req.op)) {
       if (isClone_()) { try { lock.releaseLock(); } catch (e3) {} const P = PropertiesService.getScriptProperties(); const r = hubCall_(P.getProperty('HUB_URL'), Object.assign({}, req, { op: 'hub_' + req.op, mkey: P.getProperty('HUB_KEY'), initData: '' })); return out_(r || { ok: false, err: 'hub_down' }); }
+      if (/^code_/.test(req.op)) return out_(codes_(me, req));
+      if (/^notify_/.test(req.op)) return out_(notify_(me, req));
       return out_(req.op === 'feed' ? feed_(me) : req.op === 'lib' ? lib_(me, req) : react_(me, req));
     }
     if (roleOf_(me) === 'viewer' && /^(push|recognize|file_put|file_del|doc_read|food_read)$/.test(req.op)) return out_({ ok: false, err: 'read_only' });
@@ -936,7 +938,7 @@ function tenantBackups_() {
 /* ---------- основной сервер: запросы от личных серверов (по ключу участника) ---------- */
 function hubApi_(req) {
   if (isClone_()) return { ok: false, err: 'not_hub' };
-  const lock = LockService.getScriptLock(); if (/^(mirror_push|mirror_file|hub_react)$/.test(req.op)) lock.waitLock(20000);
+  const lock = LockService.getScriptLock(); if (/^(mirror_push|mirror_file|hub_react|hub_code_put|hub_notify_set)$/.test(req.op)) lock.waitLock(20000);
   try {
     const m = members_(); const rec = m.list.find(x => x.mkey && x.mkey === String(req.mkey || ''));
     if (!rec) return { ok: false, err: 'bad_key' };
@@ -954,6 +956,8 @@ function hubApi_(req) {
     if (req.op === 'hub_feed') return feed_(rec);
     if (req.op === 'hub_react') return react_(rec, req);
     if (req.op === 'hub_lib') return lib_(rec, req);
+    if (/^hub_code_/.test(req.op)) return codes_(rec, req);
+    if (/^hub_notify_/.test(req.op)) return notify_(rec, req);
     return { ok: false, err: 'bad_op' };
   } finally { try { lock.releaseLock(); } catch (e) {} }
 }
@@ -1070,6 +1074,111 @@ function react_(me, req) {
     if (to !== me.id) { try { tg_('sendMessage', { chat_id: to, text: me.name + ' ' + emoji + ' — ваш день ' + day.split('-').reverse().slice(0, 2).join('.') + ' в «Метрике»' }); } catch (e) {} }
   }
   return feed_(me);
+}
+
+/* ---------- общие штрихкоды: кто-то один привязал штрихкод к продукту — находят все ---------- */
+function codes_(me, req) {
+  const code = String(req.code || '').replace(/\D/g, '');
+  if (code.length < 8 || code.length > 14) return { ok: false, err: 'bad_code' };
+  const sh = indexSheet_('codes', ['code', 'json', 'member', 'at']);
+  if (/code_put$/.test(req.op)) {
+    const f = req.food || {}, per = f.per || {};
+    const n = v => { v = +v; return isFinite(v) && v >= 0 && v < 10000 ? Math.round(v * 10) / 10 : 0; };
+    const name = String(f.name || '').trim().slice(0, 120);
+    const food = { name: name, brand: String(f.brand || '').trim().slice(0, 60), per: { k: n(per.k), p: n(per.p), f: n(per.f), c: n(per.c) },
+      units: (Array.isArray(f.units) ? f.units : []).slice(0, 6).map(u => ({ n: String((u && u.n) || '').trim().slice(0, 30), g: n(u && u.g) })).filter(u => u.n && u.g > 0) };
+    if (!name || (!food.per.k && !food.per.p && !food.per.f && !food.per.c)) return { ok: false, err: 'bad_food' };
+    upsertIndex_(sh, [['c' + code, JSON.stringify(food), me.id, Date.now()]], 1);
+    return { ok: true };
+  }
+  const r = indexRows_('codes', 4).find(x => String(x[0]) === 'c' + code);
+  if (!r) return { ok: true, food: null };
+  let food = null; try { food = JSON.parse(String(r[1])); } catch (e) {}
+  const who = members_().list.find(x => x.id === +r[2]);
+  return { ok: true, food: food, by: who ? who.name : '', mine: +r[2] === me.id };
+}
+
+/* ---------- напоминания от бота: вечером, если дневник пуст, и итог недели по воскресеньям ---------- */
+function pubNotify_(n) { n = n || {}; return { eve: !!n.eve, week: !!n.week }; }
+function ensureTick_() {
+  try { if (!ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'notifyTick')) ScriptApp.newTrigger('notifyTick').timeBased().everyHours(1).create(); return true; }
+  catch (e) { return false; }
+}
+/** Если напоминания не включаются из приложения: запустите эту функцию один раз вручную (Выполнить → enableReminders). */
+function enableReminders() {
+  if (!ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'notifyTick')) ScriptApp.newTrigger('notifyTick').timeBased().everyHours(1).create();
+  Logger.log('Готово: бот будет проверять напоминания раз в час.');
+}
+function notify_(rec, req) {
+  const m = members_(); const x = m.list.find(y => y.id === rec.id);
+  if (!x) return { ok: false, err: 'not_member' };
+  if (/notify_set$/.test(req.op)) {
+    const tz = Math.max(-720, Math.min(840, Math.round(+req.tz || 0)));
+    x.notify = Object.assign({}, x.notify || {}, { eve: !!req.eve, week: !!req.week, tz: tz, hour: 20 });
+    saveMembers_(m);
+    const trig = (x.notify.eve || x.notify.week) ? ensureTick_() : true;
+    return { ok: true, notify: pubNotify_(x.notify), trig: trig };
+  }
+  return { ok: true, notify: pubNotify_(x.notify) };
+}
+function botSay_(chatId, text) {
+  const b = botName_();
+  return tg_('sendMessage', { chat_id: chatId, text: text, reply_markup: b ? { inline_keyboard: [[{ text: 'Открыть «Метрику»', url: 'https://t.me/' + b + '?startapp' }]] } : undefined });
+}
+function ruNum_(v) { return String(v).replace('.', ','); }
+function weekText_(x, day) {
+  const rows = rows_(x.tenant ? x : null); const byKey = {}; rows.forEach(r => { byKey[r[0]] = r[1]; });
+  const d0 = new Date(day + 'T00:00:00Z').getTime(); let logged = 0, kc = 0;
+  for (let i = 0; i < 7; i++) {
+    const k = new Date(d0 - i * 864e5).toISOString().slice(0, 10); let its = [];
+    try { its = JSON.parse(byKey['f_' + k]).f.items || []; } catch (e) {}
+    if (its.length) { logged++; its.forEach(it => { kc += +it.k || 0; }); }
+  }
+  const from = new Date(d0 - 6 * 864e5).toISOString().slice(0, 10); let last = null, prev = null;
+  rows.forEach(r => {
+    if (!/^p_/.test(r[0]) || !r[1]) return; let p = null; try { p = JSON.parse(r[1]).p; } catch (e) {} if (!p) return;
+    const w = {}; (p.weights || []).forEach(v => { if (v && v.date && isFinite(+v.kg)) w[v.date] = +v.kg; });
+    String(p.wlog || '').split(';').forEach(t => { const q = t.match(/^(\d{6}):(\d+(?:\.\d+)?)$/); if (q) w['20' + q[1].slice(0, 2) + '-' + q[1].slice(2, 4) + '-' + q[1].slice(4, 6)] = +q[2]; });
+    const ds = Object.keys(w).sort(); if (!ds.length) return; const ld = ds[ds.length - 1];
+    if (!last || ld > last.d) { last = { d: ld, kg: w[ld] }; const pd = ds.filter(d => d < from).pop(); prev = pd ? { d: pd, kg: w[pd] } : null; }
+  });
+  const lines = [];
+  if (logged) lines.push('Дневник: ' + logged + ' из 7 дней', 'В среднем: ' + Math.round(kc / logged) + ' ккал в день');
+  if (last && last.d >= from) {
+    const diff = prev ? Math.round((last.kg - prev.kg) * 10) / 10 : null;
+    lines.push('Вес: ' + ruNum_(last.kg) + ' кг' + (diff != null ? ' (' + (diff > 0 ? '+' : diff < 0 ? '−' : '') + ruNum_(Math.abs(diff)) + ' кг к прошлой неделе)' : ''));
+  }
+  if (!lines.length) return '📊 Итог недели в «Метрике»: записей за эту неделю нет. Начнём с завтрака в понедельник?';
+  return '📊 Итог недели в «Метрике»\n' + lines.join('\n');
+}
+/** Запускается раз в час сам (триггер создаётся, когда кто-то включает напоминания). */
+function notifyTick(e, nowMs) {
+  if (isClone_()) return;
+  const now = nowMs || Date.now(); const m = members_(); const upd = {};
+  m.list.forEach(x => {
+    const n = x.notify; if (!n || (!n.eve && !n.week)) return;
+    const loc = new Date(now + (+n.tz || 0) * 60000); if (loc.getUTCHours() !== (+n.hour || 20)) return;
+    const day = loc.toISOString().slice(0, 10);
+    try {
+      if (n.week && loc.getUTCDay() === 0) {
+        if (n.lastW !== day) { botSay_(x.id, weekText_(x, day)); upd[x.id] = { lastW: day, last: day }; }
+        return;
+      }
+      if (n.eve && n.last !== day) {
+        const r = rows_(x.tenant ? x : null).find(q => q[0] === 'f_' + day); let cnt = 0;
+        try { cnt = (JSON.parse(r[1]).f.items || []).length; } catch (e2) {}
+        if (!cnt) botSay_(x.id, '🍽 Дневник питания за сегодня пока пуст. Запишите, что ели, — это займёт минуту.');
+        upd[x.id] = { last: day };
+      }
+    } catch (e1) {}
+  });
+  const ids = Object.keys(upd); if (!ids.length) return;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000); const m2 = members_();
+    ids.forEach(id => { const y = m2.list.find(z => String(z.id) === id); if (y && y.notify) Object.assign(y.notify, upd[id]); });
+    saveMembers_(m2);
+  } finally { try { lock.releaseLock(); } catch (e3) {} }
 }
 
 /* ---------- служебное ---------- */
