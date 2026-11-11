@@ -10,9 +10,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#eef5f5">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon-2.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192-2.png">
+<link rel="manifest" href="manifest-2.webmanifest">
 <title>Метрика</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2998,7 +2998,7 @@ async function webLoginPoll(){if(!webGate()||!WL.secret||WL.polling||WL.err)retu
     if(r.pending&&!r.alive){WL.polling=false;await webLoginInit(true);return;}
   }catch(e){}WL.polling=false;}
 function webLoginHTML(){if(!WL.secret&&!WL.busy&&!WL.err)setTimeout(()=>webLoginInit(),0);const ok=WL.bot&&WL.code&&!WL.err;
-  return '<section class="hero" style="text-align:center"><img src="apple-touch-icon.png" alt="" width="84" height="84" style="border-radius:20px;display:block;margin:0 auto 10px"><div class="names">'+APP_NAME+'</div><div class="when">Войдите через Telegram — и здесь появятся ваши анализы, дневник питания и всё остальное.</div></section>'+
+  return '<section class="hero" style="text-align:center"><img src="apple-touch-icon-2.png" alt="" width="84" height="84" style="border-radius:20px;display:block;margin:0 auto 10px"><div class="names">'+APP_NAME+'</div><div class="when">Войдите через Telegram — и здесь появятся ваши анализы, дневник питания и всё остальное.</div></section>'+
    '<section class="card"><div class="stack" style="gap:14px">'+
    (WL.err?'<p class="note" style="margin:0;text-align:center">'+WL.err+'</p><button type="button" class="btn primary block big-cta" data-act="webretry">Повторить</button>'
     :ok?'<a class="btn primary block big-cta" style="text-decoration:none" href="tg://resolve?domain='+esc(WL.bot)+'&startapp=web_'+WL.code+'">Войти через Telegram</a>'+
